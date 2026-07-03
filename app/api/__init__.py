@@ -333,6 +333,23 @@ def create_oab():
     )
     db.session.add(o)
     db.session.commit()
+
+    # Dispara a PRIMEIRA busca automaticamente: varredura nacional completa
+    # (2 anos). Roda em thread para nao travar o cadastro. Cadastra todos os
+    # processos encontrados, mesmo que antigos.
+    import threading
+    def _primeira_busca():
+        try:
+            with current_app.app_context():
+                monitor = MonitorOAB()
+                monitor.capturar_para_oab_oab(
+                    o, days_back=730, user=current_user
+                )
+        except Exception as e:
+            current_app.logger.warning("primeira busca OAB %s/%s falhou: %s",
+                                       o.numero, o.uf, e)
+    threading.Thread(target=_primeira_busca, daemon=True).start()
+
     return jsonify(o.to_dict()), 201
 
 

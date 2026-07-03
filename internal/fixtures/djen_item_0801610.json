@@ -1,0 +1,26 @@
+{
+  "numero_processo": "0801610-47.2026.8.19.0068",
+  "numeroComunicacao": 12345,
+  "data_disponibilizacao": "2026-07-02T08:00:00",
+  "siglaTribunal": "TJRJ",
+  "meio": "D",
+  "meiocompleto": "Diario de Justica Eletronico Nacional",
+  "link": "https://comunica.pje.jus.br/diario/teste",
+  "hash": "abc123def",
+  "tipoComunicacao": "Intimacao",
+  "nomeClasse": "PROCEDIMENTO DO JUIZADO ESPECIAL CIVEL",
+  "codigoClasse": 436,
+  "nomeOrgao": "Juizado Especial Adjunto Civel da Comarca de Rio das Ostras",
+  "tipoDocumento": "Sentenca",
+  "destinatarios": [
+    {"polo": "A", "nome": "ELIETE DA SILVA TEIXEIRA"},
+    {"polo": "P", "nome": "CEG RIO S A"}
+  ],
+  "destinatarioadvogados": [
+    {"advogado": {"nome": "DEBORAH DIAS DA COSTA BENTO", "numero_oab": "165371", "uf_oab": "RJ"}},
+    {"advogado": {"nome": "PATRICK DA SILVA BASTOS DE CASTRO", "numero_oab": "244384", "uf_oab": "RJ"}},
+    {"advogado": {"nome": "MARCIA CAMPOS RODRIGUES GUIMARAES", "numero_oab": "208789", "uf_oab": "RJ"}}
+  ],
+  "texto": "Processo:0801610-47.2026.8.19.0068 Classe:PROCEDIMENTO DO JUIZADO ESPECIAL CIVEL (436) AUTOR: ELIETE DA SILVA TEIXEIRA REU: CEG RIO S A SENTENCA. HOMOLOGO, por sentenca, para que produza seus juridicos e legais efeitos, o projeto de sentenca. Valor da causa: R$ 5.432,10.",
+  "valor_causa": 5432.10
+}
