@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Configuracoes - Lex-Praxis{% endblock %}
+{% block page %}Configuracoes{% endblock %}
+{% block crumb %}- preferencias, integracoes, IA local{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Configuracoes</h3>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>Preferencias gerais</strong></div>
+      <div class="card-body">
+        <form id="form-prefs">
+          <div class="mb-2">
+            <label class="form-label">Tema</label>
+            <select class="form-select" name="theme">
+              <option value="light" {% if cfg.theme=='light' %}selected{% endif %}>Claro</option>
+              <option value="dark" {% if cfg.theme=='dark' %}selected{% endif %}>Escuro</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">OAB padrao (numero)</label>
+            <input class="form-control" name="default_oab" value="{{ cfg.default_oab or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">UF padrao</label>
+            <input class="form-control" name="default_uf" maxlength="2" value="{{ cfg.default_uf or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Dias retroativos (padrao)</label>
+            <input class="form-control" type="number" min="1" max="365" name="days_back_padrao" value="{{ cfg.days_back_padrao or 7 }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Intervalo do monitor (min)</label>
+            <input class="form-control" type="number" min="5" max="1440" name="intervalo_monitor_min" value="{{ cfg.intervalo_monitor_min or 60 }}">
+          </div>
+          <div class="mb-2 form-check">
+            <input class="form-check-input" type="checkbox" name="receber_digest" {% if cfg.receber_digest %}checked{% endif %} id="chk-digest">
+            <label class="form-check-label" for="chk-digest">Receber digest diario</label>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Hora do digest (0-23)</label>
+            <input class="form-control" type="number" min="0" max="23" name="digest_hora" value="{{ cfg.digest_hora or 7 }}">
+          </div>
+          <button type="submit" class="btn btn-primary">Salvar preferencias</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>IA local (gratuita)</strong></div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Use Ollama, LM Studio ou qualquer endpoint OpenAI-compat.
+          <a href="https://ollama.com" target="_blank">Instalar Ollama</a> &middot;
+          <a href="https://lmstudio.ai" target="_blank">LM Studio</a>
+        </p>
+        <form id="form-ia">
+          <div class="mb-2 form-check">
+            <input class="form-check-input" type="checkbox" name="llm_enabled" {% if cfg.llm_enabled %}checked{% endif %} id="chk-ia">
+            <label class="form-check-label" for="chk-ia">Habilitar IA local</label>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Provider</label>
+            <select class="form-select" name="llm_provider">
+              <option value="ollama" {% if cfg.llm_provider=='ollama' %}selected{% endif %}>Ollama</option>
+              <option value="lmstudio" {% if cfg.llm_provider=='lmstudio' %}selected{% endif %}>LM Studio</option>
+              <option value="openai_compat" {% if cfg.llm_provider=='openai_compat' %}selected{% endif %}>OpenAI-compat (llama.cpp, vllm, etc)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Endpoint</label>
+            <input class="form-control" name="llm_endpoint" value="{{ cfg.llm_endpoint or 'http://localhost:11434' }}">
+            <div class="form-text">Ollama: http://localhost:11434 &middot; LM Studio: http://localhost:1234/v1</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Modelo</label>
+            <select class="form-select" name="llm_model" id="sel-llm-model">
+              <option value="{{ cfg.llm_model or 'llama3.1:8b' }}">{{ cfg.llm_model or 'llama3.1:8b' }} (atual)</option>
+            </select>
+            <div class="form-text" id="modelo-help">Carregando modelos instalados no Ollama...</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">API Key (opcional)</label>
+            <input class="form-control" type="password" name="llm_api_key" value="{{ cfg.llm_api_key or '' }}">
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Salvar IA</button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-testar-ia">Testar conexao</button>
+          </div>
+        </form>
+        <div id="ia-status" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>Notificacoes</strong></div>
+      <div class="card-body">
+        <form id="form-notif">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="notif_email" {% if cfg.notif_email %}checked{% endif %} id="chk-email">
+            <label class="form-check-label" for="chk-email">Email</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="notif_whatsapp" {% if cfg.notif_whatsapp %}checked{% endif %} id="chk-wpp">
+            <label class="form-check-label" for="chk-wpp">WhatsApp (em breve)</label>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Numero WhatsApp</label>
+            <input class="form-control" name="whatsapp_number" value="{{ cfg.whatsapp_number or '' }}" placeholder="(21) 99999-9999">
+          </div>
+          <button type="submit" class="btn btn-primary">Salvar notificacoes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>Sobre o sistema</strong></div>
+      <div class="card-body">
+        <p><b>Lex-Praxis v2.0.0</b> &middot; DJe + Monitor de OAB</p>
+        <p class="text-muted small">Sistema juridico com captura automatica de publicacoes
+          do Diario de Justica Eletronico Nacional (PJe Comunica), cadastro de processos
+          com vinculo a OAB, e prazos processuais automaticos.</p>
+        {% if is_admin %}
+        <hr>
+        <a href="/admin" class="btn btn-outline-primary btn-sm">Painel admin</a>
+        <a href="/admin/usuarios" class="btn btn-outline-primary btn-sm">Gerenciar usuarios</a>
+        <a href="/admin/configs" class="btn btn-outline-primary btn-sm">Configuracoes globais</a>
+        <a href="/admin/logs" class="btn btn-outline-primary btn-sm">Logs de auditoria</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function postCfg(formId, fields) {
+  const fd = new FormData(document.getElementById(formId));
+  const body = {};
+  fields.forEach(f => {
+    const v = fd.get(f);
+    if (v === null) return;
+    if (fd.has(f) && v === 'on') body[f] = false; // default false se nao marcar
+    body[f] = v;
+  });
+  // Corrigir checkboxes
+  document.querySelectorAll('#' + formId + ' input[type=checkbox]').forEach(c => {
+    body[c.name] = c.checked;
+  });
+  const r = await fetch('/api/v1/me/config', {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+document.getElementById('form-prefs').onsubmit = async (e) => {
+  e.preventDefault();
+  const fields = ['theme', 'default_oab', 'default_uf', 'days_back_padrao', 'intervalo_monitor_min', 'receber_digest', 'digest_hora'];
+  const r = await postCfg('form-prefs', fields);
+  alert('Preferencias salvas!');
+  location.reload();
+};
+
+document.getElementById('form-ia').onsubmit = async (e) => {
+  e.preventDefault();
+  const fields = ['llm_enabled', 'llm_provider', 'llm_endpoint', 'llm_model', 'llm_api_key'];
+  const r = await postCfg('form-ia', fields);
+  alert('IA salva! Use o botao Testar conexao.');
+  location.reload();
+};
+
+document.getElementById('form-notif').onsubmit = async (e) => {
+  e.preventDefault();
+  const fields = ['notif_email', 'notif_whatsapp', 'whatsapp_number'];
+  await postCfg('form-notif', fields);
+  alert('Notificacoes salvas!');
+  location.reload();
+};
+
+// Popular o select de modelos a partir do Ollama (se rodando)
+(async function() {
+  try {
+    const r = await fetch('/api/v1/ia/status').then(r => r.json());
+    if (r.modelos && r.modelos.length) {
+      const sel = document.getElementById('sel-llm-model');
+      const atual = sel.value;
+      sel.innerHTML = '';
+      r.modelos.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m + (m === atual ? ' (atual)' : '');
+        if (m === atual) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      document.getElementById('modelo-help').innerHTML = '<b>' + r.modelos.length + ' modelos disponiveis</b> no Ollama. Escolha um acima.';
+    } else {
+      document.getElementById('modelo-help').innerHTML = 'Ollama nao respondeu. Defina manualmente.';
+    }
+  } catch (e) {
+    document.getElementById('modelo-help').textContent = 'Erro ao consultar Ollama: ' + e.message;
+  }
+})();
+
+document.getElementById('btn-testar-ia').onclick = async () => {
+  const r = await fetch('/api/v1/ia/status').then(r => r.json());
+  const el = document.getElementById('ia-status');
+  if (r.available) {
+    el.innerHTML = '<div class="alert alert-success">Disponivel! Modelos: ' + (r.modelos || []).join(', ') + '</div>';
+  } else if (r.enabled) {
+    el.innerHTML = '<div class="alert alert-danger">IA habilitada mas servidor nao responde. Verifique o endpoint e se o provider esta rodando.</div>';
+  } else {
+    el.innerHTML = '<div class="alert alert-warning">IA desabilitada. Marque "Habilitar IA local" e salve.</div>';
+  }
+};
+</script>
+{% endblock %}

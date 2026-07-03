@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}OABs monitoradas - Lex-Praxis{% endblock %}
+{% block page %}OABs monitoradas{% endblock %}
+{% block crumb %}- gerenciamento de OABs para o monitor DJe{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="h5 mb-0"><i class="bi bi-broadcast"></i> OABs monitoradas</h2>
+  <div>
+    <button class="btn btn-outline-secondary btn-sm" id="btn-capturar-todos">
+      <i class="bi bi-arrow-repeat"></i> Capturar todas agora
+    </button>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalOab">
+      <i class="bi bi-plus-lg"></i> Nova OAB
+    </button>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <div id="status-dje" class="text-muted small mb-3">Verificando status do DJe...</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle" id="tabela-oabs">
+        <thead class="table-light">
+          <tr>
+            <th>OAB</th><th>Apelido</th><th>Intervalo</th>
+            <th>&Uacute;ltima busca</th><th>Encontrados</th><th>Criados</th>
+            <th>Status</th><th class="text-end">A&ccedil;&otilde;es</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalOab" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="form-oab">
+        <div class="modal-header">
+          <h5 class="modal-title">Cadastrar OAB para monitoramento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">N&uacute;mero (somente d&iacute;gitos)</label>
+            <input type="text" name="numero" class="form-control" required maxlength="10" pattern="[0-9]+" placeholder="123456">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">UF (seccional)</label>
+            <select name="uf" class="form-select" required>
+              {% for uf in ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"] %}
+              <option value="{{ uf }}">{{ uf }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Apelido (opcional)</label>
+            <input type="text" name="apelido" class="form-control" placeholder="Ex.: Dr. Ricardo - matriz">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Intervalo de busca (minutos)</label>
+            <input type="number" name="intervalo_minutos" class="form-control" value="60" min="15" max="1440">
+            <div class="form-text">Padr&atilde;o: 60 min. M&iacute;nimo: 15 min.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Cadastrar e iniciar busca</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function() {
+  const tbody = document.querySelector("#tabela-oabs tbody");
+  const statusEl = document.getElementById("status-dje");
+
+  function fmt(d) { if (!d) return "-"; return new Date(d).toLocaleString("pt-BR"); }
+  function badge(ativo) { return ativo ? '<span class="badge bg-success">Ativa</span>' : '<span class="badge bg-secondary">Pausada</span>'; }
+
+  async function loadStatus() {
+    try {
+      const r = await fetch("/api/v1/oab/status");
+      const j = await r.json();
+      const djeTxt = j.dje_enabled
+        ? '<b style="color:#1a7f37">DJe ATIVO</b>'
+        : '<b style="color:#cf222e">DJe DESABILITADO</b> - defina DJE_COMUNICA_ENABLED=true no .env e reinicie';
+      statusEl.innerHTML = `${djeTxt} &middot; fonte: <code>${j.dje_url}</code> &middot; OABs ativas: <b>${j.oabs_ativas}</b> &middot; total de capturas: ${j.total_capturas}${j.ultima_captura ? " &middot; ultima: " + fmt(j.ultima_captura) : ""}`;
+    } catch (e) {
+      statusEl.textContent = "Nao foi possivel consultar o status DJe.";
+    }
+  }
+
+  async function loadOabs() {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Carregando...</td></tr>';
+    const r = await fetch("/api/v1/oab");
+    const j = await r.json();
+    if (!j.items || !j.items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Nenhuma OAB cadastrada. Clique em "Nova OAB" para comecar.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = j.items.map(o => `
+      <tr>
+        <td><b>${o.uf} ${o.numero}</b></td>
+        <td>${o.apelido || "<span class='text-muted'>-</span>"}</td>
+        <td>${o.intervalo_minutos} min</td>
+        <td>${fmt(o.ultima_busca_em)}</td>
+        <td>${o.total_processos_encontrados || 0}</td>
+        <td>${o.total_processos_criados || 0}</td>
+        <td>${badge(o.ativo)}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary" data-capturar="${o.id}">
+            <i class="bi bi-arrow-repeat"></i> Capturar
+          </button>
+        </td>
+      </tr>
+    `).join("");
+    tbody.querySelectorAll("[data-capturar]").forEach(b => {
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = "Buscando...";
+        const r = await fetch(`/api/v1/oab/${b.dataset.capturar}/capturar`, {method: "POST"});
+        const j = await r.json();
+        const msg = j.status === "ok"
+          ? `OAB capturada: ${j.publicacoes_encontradas} publicacoes, ${j.processos_novos} processos novos, ${j.andamentos_novos} andamentos, ${j.prazos_novos} prazos.`
+          : `Status: ${j.status} - ${j.mensagem || j.erro || ""}`;
+        alert(msg);
+        loadOabs();
+        loadStatus();
+      };
+    });
+  }
+
+  document.getElementById("form-oab").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {
+      numero: fd.get("numero"), uf: fd.get("uf"),
+      apelido: fd.get("apelido"),
+      intervalo_minutos: parseInt(fd.get("intervalo_minutos") || "60", 10),
+    };
+    const r = await fetch("/api/v1/oab", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) {
+      const j = await r.json();
+      alert(j.error || "Erro ao cadastrar");
+      return;
+    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById("modalOab"));
+    if (modal) modal.hide();
+    e.target.reset();
+    await loadOabs();
+    await loadStatus();
+  };
+
+  document.getElementById("btn-capturar-todos").onclick = async () => {
+    const b = document.getElementById("btn-capturar-todos");
+    b.disabled = true; b.innerHTML = "Capturando...";
+    const r = await fetch("/api/v1/oab/capturar-todas", {method: "POST"});
+    const j = await r.json();
+    const linhas = (j.resultados || []).map(rv =>
+      `${rv.oab}: ${rv.status} (${rv.publicacoes_encontradas || 0} pubs, ${rv.processos_novos || 0} novos)`
+    ).join("\n");
+    alert(`Captura concluida para ${j.oabs} OABs:\n\n${linhas}`);
+    b.disabled = false; b.innerHTML = '<i class="bi bi-arrow-repeat"></i> Capturar todas agora';
+    loadOabs(); loadStatus();
+  };
+
+  await loadStatus();
+  await loadOabs();
+})();
+</script>
+{% endblock %}

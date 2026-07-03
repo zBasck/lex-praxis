@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Lex-Praxis{% endblock %}
+{% block page %}Dashboard{% endblock %}
+{% block content %}
+
+<div class="grid cols-4 mb-3">
+  <div class="kpi primary">
+    <div class="label">Processos ativos</div>
+    <div class="value" id="kpi-processos">—</div>
+    <div class="sub">cadastrados no sistema</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Clientes ativos</div>
+    <div class="value" id="kpi-clientes">—</div>
+    <div class="sub">com monitoramento</div>
+  </div>
+  <div class="kpi warn">
+    <div class="label">Prazos próximos</div>
+    <div class="value" id="kpi-prazos-proximos">—</div>
+    <div class="sub">próximos 15 dias</div>
+  </div>
+  <div class="kpi danger">
+    <div class="label">Prazos vencidos</div>
+    <div class="value" id="kpi-prazos-vencidos">—</div>
+    <div class="sub">requerem atenção</div>
+  </div>
+</div>
+
+<div class="grid cols-2 mb-3">
+  <div class="card">
+    <h2>Monitor DJE/DJR
+      <span class="meta"><a href="{{ url_for('web.monitor_dje') }}">configurar →</a></span>
+    </h2>
+    <div class="row" id="dje-info">
+      <span class="tag muted">verificando...</span>
+    </div>
+    <hr>
+    <div class="muted" style="font-size: 12px;">
+      Coleta baseada em <strong>PJe Comunica</strong> · busca por OAB ou número CNJ ·
+      cadastra processos automaticamente quando sua OAB aparece em uma publicação.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Distribuição por tribunal</h2>
+    <div id="tribunal-chart">
+      <div class="muted">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid cols-2 mb-3">
+  <div class="card">
+    <h2>Próximos prazos
+      <span class="meta"><a href="{{ url_for('web.prazos') }}">ver todos →</a></span>
+    </h2>
+    <table id="tbl-prazos">
+      <thead>
+        <tr><th>Vencimento</th><th>Tipo</th><th>Processo</th><th class="right">Dias</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Últimas publicações DJe
+      <span class="meta"><a href="{{ url_for('web.dje') }}">ver todas →</a></span>
+    </h2>
+    <table id="tbl-publicacoes">
+      <thead>
+        <tr><th>Data</th><th>Tribunal</th><th>Tipo</th><th>Texto</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Andamentos recentes</h2>
+  <ul class="timeline" id="timeline-andamentos">
+    <li class="muted">Carregando...</li>
+  </ul>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+(async function() {
+  try {
+    const r = await fetch('/api/v1/dashboard');
+    const d = await r.json();
+    document.getElementById('kpi-processos').textContent = d.kpi.processos_ativos;
+    document.getElementById('kpi-clientes').textContent = d.kpi.clientes_ativos;
+    document.getElementById('kpi-prazos-proximos').textContent = d.kpi.prazos_proximos;
+    document.getElementById('kpi-prazos-vencidos').textContent = d.kpi.prazos_vencidos;
+
+    // Prazos
+    const tbP = document.querySelector('#tbl-prazos tbody');
+    if (d.proximos_prazos.length === 0) {
+      tbP.innerHTML = '<tr class="empty"><td colspan="4">Sem prazos abertos</td></tr>';
+    } else {
+      tbP.innerHTML = d.proximos_prazos.map(p => {
+        const cls = p.dias_restantes < 0 ? 'danger' : (p.dias_restantes <= 5 ? 'warn' : '');
+        return `<tr>
+          <td>${p.data_limite}</td>
+          <td><span class="tag ${cls}">${p.tipo || 'prazo'}</span></td>
+          <td class="mono">${p.processo_cnj || '—'}</td>
+          <td class="right">${p.dias_restantes}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Publicações
+    const tbPub = document.querySelector('#tbl-publicacoes tbody');
+    if (d.ultimas_publicacoes.length === 0) {
+      tbPub.innerHTML = '<tr class="empty"><td colspan="4">Sem publicações capturadas</td></tr>';
+    } else {
+      tbPub.innerHTML = d.ultimas_publicacoes.map(p => `
+        <tr>
+          <td class="nowrap">${p.data}</td>
+          <td><span class="tag muted">${p.tribunal || '—'}</span></td>
+          <td>${p.caderno || '—'}</td>
+          <td class="ellipsis" title="${(p.texto||'').replace(/"/g,'&quot;')}">${(p.texto||'').slice(0, 110)}...</td>
+        </tr>`).join('');
+    }
+
+    // Timeline andamentos
+    const tl = document.getElementById('timeline-andamentos');
+    if (d.ultimos_andamentos.length === 0) {
+      tl.innerHTML = '<li class="muted">Sem andamentos ainda. O monitor DJR cadastrará processos automaticamente assim que houver publicações da sua OAB.</li>';
+    } else {
+      tl.innerHTML = d.ultimos_andamentos.map(a => `
+        <li>
+          <div class="meta">${a.data.slice(0,10)} · <span class="tag muted">${a.tipo_ato || 'ato'}</span> · ${a.fonte || ''}</div>
+          <div class="body">${(a.texto||'').slice(0,300)}</div>
+        </li>`).join('');
+    }
+
+    // Tribunais
+    const tc = document.getElementById('tribunal-chart');
+    if (!d.processos_por_tribunal || d.processos_por_tribunal.length === 0) {
+      tc.innerHTML = '<div class="muted">Nenhum processo cadastrado ainda.</div>';
+    } else {
+      const max = Math.max(...d.processos_por_tribunal.map(t => t.count));
+      tc.innerHTML = d.processos_por_tribunal.map(t => {
+        const w = (t.count / max * 100).toFixed(0);
+        return `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+          <div style="width:90px;" class="mono">${t.tribunal}</div>
+          <div style="flex:1;background:rgba(255,255,255,.04);border-radius:6px;height:14px;overflow:hidden;">
+            <div style="width:${w}%;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));"></div>
+          </div>
+          <div style="width:40px;text-align:right;">${t.count}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) { console.error(e); }
+
+  // DJE status
+  try {
+    const r = await fetch('/api/v1/dje/status');
+    const d = await r.json();
+    const el = document.getElementById('dje-info');
+    if (d.modo === 'real') {
+      el.innerHTML = `<span class="tag ok">Ativo (PJe Comunica)</span>
+        <span class="tag muted">${d.tribunais_cobertos_pje_comunica} tribunais cobertos</span>
+        <span class="tag muted">${d.tribunais_total} totais no catálogo</span>`;
+    } else {
+      el.innerHTML = `<span class="tag warn">DJE desabilitado</span>
+        <span class="muted" style="font-size:12px;">Defina <code>DJE_COMUNICA_ENABLED=true</code> no .env para ativar a coleta real.</span>`;
+    }
+  } catch (e) { console.error(e); }
+})();
+</script>
+{% endblock %}

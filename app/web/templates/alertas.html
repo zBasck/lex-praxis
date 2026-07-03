@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Alertas - Lex Praxis{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="h4 mb-0"><i class="bi bi-bell"></i> Alertas de Clientes</h2>
+  <div>
+    <button class="btn btn-outline-secondary btn-sm" id="btn-marcar-todos">
+      <i class="bi bi-check2-all"></i> Marcar todos como lidos
+    </button>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="btn-group" role="group" id="filtros">
+      <button type="button" class="btn btn-sm btn-outline-secondary active" data-filtro="todos">Todos</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-filtro="nao_lidos">Não lidos</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-filtro="criticos">Críticos</button>
+    </div>
+  </div>
+</div>
+
+<div id="lista-alertas"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let filtroAtual = "todos";
+function fmt(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("pt-BR");
+}
+function severidadeBadge(sev) {
+  return {
+    "critical": '<span class="badge bg-danger">Crítico</span>',
+    "warning": '<span class="badge bg-warning text-dark">Atenção</span>',
+    "info": '<span class="badge bg-info text-dark">Info</span>',
+  }[sev] || `<span class="badge bg-secondary">${sev || "?"}</span>`;
+}
+function tipoBadge(tipo) {
+  return {
+    "novo_processo": '<span class="badge bg-primary">Novo processo</span>',
+    "nova_movimentacao": '<span class="badge bg-info text-dark">Nova movimentação</span>',
+    "prazo_critico": '<span class="badge bg-danger">Prazo crítico</span>',
+  }[tipo] || `<span class="badge bg-secondary">${tipo || "?"}</span>`;
+}
+async function load() {
+  const el = document.getElementById("lista-alertas");
+  el.innerHTML = '<div class="text-center text-muted py-5">Carregando…</div>';
+  const params = new URLSearchParams();
+  if (filtroAtual === "nao_lidos") params.set("lido", "0");
+  if (filtroAtual === "criticos") params.set("severidade", "critical");
+  const r = await fetch("/api/v1/alertas?" + params);
+  const j = await r.json();
+  if (!j.items.length) {
+    el.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-check2-circle" style="font-size:2rem"></i><br>Nenhum alerta.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="card shadow-sm">
+      <div class="list-group list-group-flush">
+        ${j.items.map(a => `
+          <div class="list-group-item ${a.lido ? "" : "list-group-item-action bg-body-tertiary"}">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <div class="d-flex gap-2 align-items-center mb-1">
+                  ${severidadeBadge(a.severidade)}
+                  ${tipoBadge(a.tipo)}
+                  ${a.lido ? "" : '<span class="badge bg-success">Novo</span>'}
+                  <small class="text-muted ms-auto">${fmt(a.created_at)}</small>
+                </div>
+                <h6 class="mb-1">${a.titulo}</h6>
+                <p class="mb-1 text-muted small">${a.descricao || ""}</p>
+                <small class="text-muted">
+                  <i class="bi bi-person"></i> ${a.cliente_nome || "?"}
+                  · <i class="bi bi-broadcast"></i> ${a.oab_formatada || "?"}
+                  · <i class="bi bi-folder"></i> <a href="/processos/${a.processo_id}">${a.processo_cnj || "?"}</a>
+                </small>
+              </div>
+              <div class="ms-3">
+                ${a.lido ? "" : `<button class="btn btn-sm btn-outline-primary" data-ler="${a.id}">Marcar lido</button>`}
+              </div>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+  el.querySelectorAll("[data-ler]").forEach(b => {
+    b.onclick = async () => {
+      await fetch(`/api/v1/alertas/${b.dataset.ler}/marcar-lido`, {method: "POST"});
+      load();
+    };
+  });
+}
+document.getElementById("filtros").querySelectorAll("button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("#filtros button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    filtroAtual = b.dataset.filtro;
+    load();
+  };
+});
+document.getElementById("btn-marcar-todos").onclick = async () => {
+  await fetch("/api/v1/alertas/marcar-todos-lidos", {method: "POST"});
+  load();
+};
+load();
+</script>
+{% endblock %}

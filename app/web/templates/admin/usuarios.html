@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Usuarios - Admin{% endblock %}
+{% block page %}Gestao de usuarios{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Usuarios do sistema</h3>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#m-user">
+    <i class="bi bi-plus-lg"></i> Novo usuario
+  </button>
+</div>
+
+<table class="table table-hover align-middle">
+  <thead class="table-light">
+    <tr><th>Nome</th><th>Email</th><th>Papel</th><th>OAB</th><th>Status</th><th>Acoes</th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td><strong>{{ u.name }}</strong></td>
+      <td>{{ u.email }}</td>
+      <td><span class="badge bg-{{ 'success' if u.role=='admin' else ('info' if u.role=='advogado' else 'secondary') }}">{{ u.role }}</span></td>
+      <td>{{ u.oab or '-' }}</td>
+      <td>{% if u.active %}<span class="badge bg-success">ativo</span>{% else %}<span class="badge bg-secondary">inativo</span>{% endif %}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" data-edit='{{ {"id":u.id,"name":u.name,"email":u.email,"role":u.role,"oab":u.oab or "","phone":u.phone or "","active":u.active}|tojson }}'>Editar</button>
+        <button class="btn btn-sm btn-outline-secondary" data-reset='{{ u.id }}'>Resetar senha</button>
+        {% if u.id != current_user.id %}
+        <button class="btn btn-sm btn-outline-danger" data-del='{{ u.id }}'>Desativar</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="modal fade" id="m-user" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" id="f-user">
+      <div class="modal-header"><h5 id="m-title">Novo usuario</h5>
+        <button class="btn-close" data-bs-dismiss="modal" type="button"></button></div>
+      <div class="modal-body">
+        <input type="hidden" name="id">
+        <div class="mb-2"><label class="form-label">Nome *</label>
+          <input class="form-control" name="name" required></div>
+        <div class="mb-2"><label class="form-label">Email *</label>
+          <input class="form-control" name="email" type="email" required></div>
+        <div class="mb-2"><label class="form-label">Senha (deixe vazio para manter)</label>
+          <input class="form-control" name="password" type="password"></div>
+        <div class="mb-2"><label class="form-label">Papel</label>
+          <select class="form-select" name="role">
+            <option value="advogado">advogado</option>
+            <option value="assistente">assistente</option>
+            <option value="admin">admin</option>
+          </select></div>
+        <div class="mb-2"><label class="form-label">OAB</label>
+          <input class="form-control" name="oab" placeholder="SP 123.456"></div>
+        <div class="mb-2"><label class="form-label">Telefone</label>
+          <input class="form-control" name="phone"></div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="active" checked id="chk-active">
+          <label class="form-check-label" for="chk-active">Ativo</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-edit]').forEach(b => {
+  b.onclick = () => {
+    const u = JSON.parse(b.dataset.edit);
+    document.getElementById('m-title').textContent = 'Editar ' + u.name;
+    const f = document.getElementById('f-user');
+    f.id.value = u.id; f.name.value = u.name; f.email.value = u.email;
+    f.password.value = ''; f.role.value = u.role;
+    f.oab.value = u.oab; f.phone.value = u.phone;
+    document.getElementById('chk-active').checked = u.active;
+    new bootstrap.Modal(document.getElementById('m-user')).show();
+  };
+});
+
+document.getElementById('f-user').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = {
+    name: f.name.value, email: f.email.value, role: f.role.value,
+    oab: f.oab.value, phone: f.phone.value, active: document.getElementById('chk-active').checked,
+  };
+  if (f.password.value) body.password = f.password.value;
+  let r;
+  if (f.id.value) {
+    r = await fetch('/api/v1/users/' + f.id.value, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+  } else {
+    r = await fetch('/api/v1/users', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+  }
+  if (r.ok) location.reload();
+  else { const j = await r.json(); alert('Erro: ' + (j.error || JSON.stringify(j))); }
+};
+
+document.querySelectorAll('[data-del]').forEach(b => {
+  b.onclick = async () => {
+    if (!confirm('Desativar este usuario?')) return;
+    const r = await fetch('/api/v1/users/' + b.dataset.del, {method: 'DELETE'});
+    if (r.ok) location.reload();
+  };
+});
+
+document.querySelectorAll('[data-reset]').forEach(b => {
+  b.onclick = async () => {
+    const senha = prompt('Nova senha (min 6 chars):');
+    if (!senha || senha.length < 6) return;
+    const r = await fetch('/api/v1/users/' + b.dataset.reset, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: senha})
+    });
+    if (r.ok) alert('Senha atualizada!');
+  };
+});
+</script>
+{% endblock %}
