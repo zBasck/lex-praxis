@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Processos - Lex-Praxis{% endblock %}
+{% block page %}Processos{% endblock %}
+{% block crumb %}- cadastro, busca e atualizacao via DJe{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h5 mb-0">Processos cadastrados</h2>
+  <div>
+    <button class="btn btn-outline-primary btn-sm" id="btn-capturar-todos-dje">
+      <i class="bi bi-arrow-repeat"></i> Atualizar via DJe (todos)
+    </button>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#m-processo">
+      <i class="bi bi-plus-lg"></i> Novo processo
+    </button>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-2 mb-3">
+      <div class="col-md-6"><input id="f-q" class="form-control" placeholder="Buscar por CNJ, classe, assunto..."></div>
+      <div class="col-md-3"><select id="f-trib" class="form-select"><option value="">Todos os tribunais</option></select></div>
+      <div class="col-md-3"><select id="f-cli" class="form-select"><option value="">Todos os clientes</option></select></div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light"><tr>
+          <th>CNJ</th><th>Tribunal</th><th>Classe</th><th>Cliente</th>
+          <th>Origem</th><th>OAB</th>
+          <th>Pr&oacute;x. prazo</th><th>Vencidos</th><th></th>
+        </tr></thead>
+        <tbody id="tb-proc"><tr><td colspan="9" class="text-center text-muted py-4">Carregando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="m-processo" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="f-proc">
+        <input type="hidden" name="id_proc" id="id_proc">
+        <div class="modal-header"><h5 id="m-proc-title">Novo processo</h5><button class="btn-close" data-bs-dismiss="modal" type="button"></button></div>
+        <div class="modal-body row g-3">
+          <div class="col-md-6">
+            <label class="form-label">N&uacute;mero CNJ *</label>
+            <div class="input-group">
+              <input name="numero_cnj" id="inp-cnj" class="form-control" required placeholder="0000000-00.0000.0.00.0000">
+              <button type="button" class="btn btn-outline-primary" id="btn-buscar-dje" title="Buscar dados no DJe Comunica">
+                <i class="bi bi-search"></i> Buscar no DJe
+              </button>
+            </div>
+            <div class="form-text">Ap&oacute;s digitar, clique em <b>Buscar no DJe</b> para preencher automaticamente.</div>
+            <div id="dje-feedback" class="form-text"></div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Tribunal</label>
+            <select name="tribunal" class="form-select" id="sel-trib">
+              <option value="">(auto)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Inst&acirc;ncia</label>
+            <select name="instancia" class="form-select">
+              <option>1&ordf;</option><option>2&ordf;</option><option>Superior</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Cliente</label>
+            <select name="cliente_id" class="form-select" id="sel-cli"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Polo</label>
+            <select name="polo" class="form-select">
+              <option value="ativo">Ativo</option><option value="passivo">Passivo</option><option value="terceiro">Terceiro</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Classe</label>
+            <input name="classe" id="inp-classe" class="form-control" placeholder="Ex.: Procedimento Comum C&iacute;vel">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Assunto</label>
+            <input name="assunto" id="inp-assunto" class="form-control" placeholder="Ex.: Cobran&ccedil;a">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Vara</label>
+            <input name="vara" class="form-control">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fase</label>
+            <select name="fase" class="form-select">
+              <option>conhecimento</option><option>recursal</option><option>execu&ccedil;&atilde;o</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Valor da causa</label>
+            <input name="valor_causa" type="number" step="0.01" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Observa&ccedil;&otilde;es</label>
+            <textarea name="observacoes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+          <button class="btn btn-primary" type="submit">Cadastrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function() {
+  const tb = document.getElementById('tb-proc');
+  const fQ = document.getElementById('f-q');
+  const fTrib = document.getElementById('f-trib');
+  const fCli = document.getElementById('f-cli');
+  const selTrib = document.getElementById('sel-trib');
+  const selCli = document.getElementById('sel-cli');
+  const fProc = document.getElementById('f-proc');
+  const inpCnj = document.getElementById('inp-cnj');
+  const btnBuscar = document.getElementById('btn-buscar-dje');
+  const djeFeedback = document.getElementById('dje-feedback');
+  const inpClasse = document.getElementById('inp-classe');
+  const inpAssunto = document.getElementById('inp-assunto');
+
+  function fmt(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('pt-BR'); }
+  function onlyDigits(s) { return (s || '').replace(/\D/g, ''); }
+
+  async function loadDropdowns() {
+    try {
+      const [tribs, clis, procs] = await Promise.all([
+        fetch('/api/v1/tribunais').then(r => r.json()),
+        fetch('/api/v1/clientes').then(r => r.json()),
+        fetch('/api/v1/processos').then(r => r.json()),
+      ]);
+      const optsT = ['<option value="">Todos os tribunais</option>'].concat(
+        (tribs.items || []).map(t => `<option value="${t.sigla}">${t.sigla} - ${t.nome}</option>`)
+      );
+      fTrib.innerHTML = optsT.join('');
+      selTrib.innerHTML = ['<option value="">(auto)</option>'].concat(
+        (tribs.items || []).map(t => `<option value="${t.sigla}">${t.sigla} - ${t.nome}</option>`)
+      );
+      const optsC = ['<option value="">Todos os clientes</option>',
+        '<option value="">(filtro)</option>'].concat(
+        (clis.items || []).map(c => `<option value="${c.id}">${c.nome}</option>`)
+      );
+      fCli.innerHTML = optsC.join('');
+      selCli.innerHTML = ['<option value="">(sem cliente)</option>'].concat(
+        (clis.items || []).map(c => `<option value="${c.id}">${c.nome}</option>`)
+      );
+      return procs.items || [];
+    } catch (e) { return []; }
+  }
+
+  function render(rows) {
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Nenhum processo cadastrado.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(p => {
+      const oabs = (p.oabs_origem || []).map(o => o.oab).join(', ');
+      const origem = p.origem === 'oab_monitor'
+        ? '<span class="badge bg-info" title="' + (oabs || '') + '">OAB</span>'
+        : '<span class="badge bg-light text-dark">manual</span>';
+      return `
+      <tr>
+        <td><a href="/processos/${p.id}"><code>${p.numero_cnj}</code></a></td>
+        <td>${p.tribunal || '-'}</td>
+        <td>${p.classe || '-'}</td>
+        <td>${p.cliente_id ? '#' + p.cliente_id : '-'}</td>
+        <td>${origem}</td>
+        <td>${oabs || '-'}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-secondary" data-edit='${JSON.stringify(p)}'>
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-primary" data-att="${p.id}">
+            <i class="bi bi-arrow-repeat"></i> DJe
+          </button>
+        </td>
+      </tr>
+    `}).join('');
+    tb.querySelectorAll('[data-att]').forEach(b => {
+      b.onclick = async () => {
+        b.disabled = true; b.innerHTML = 'Atualizando...';
+        const r = await fetch('/api/v1/processos/' + b.dataset.att + '/atualizar-dje', {method: 'POST'});
+        const j = await r.json();
+        alert('Atualizado: ' + (j.andamentos_novos || 0) + ' andamentos, ' + (j.prazos_novos || 0) + ' prazos. Status: ' + (j.status || '?'));
+        location.reload();
+      };
+    });
+    tb.querySelectorAll('[data-edit]').forEach(b => {
+      b.onclick = () => {
+        const p = JSON.parse(b.dataset.edit);
+        const f = document.getElementById('f-proc');
+        document.getElementById('m-proc-title').textContent = 'Editar ' + p.numero_cnj;
+        f.id_proc.value = p.id;
+        f.numero_cnj.value = p.numero_cnj;
+        if (selTrib) selTrib.value = p.tribunal || '';
+        if (f.instancia) f.instancia.value = p.instancia || '1ª';
+        if (f.cliente_id) f.cliente_id.value = p.cliente_id || '';
+        if (f.polo) f.polo.value = p.polo || 'ativo';
+        f.vara.value = p.vara || '';
+        f.classe.value = p.classe || '';
+        f.assunto.value = p.assunto || '';
+        f.fase.value = p.fase || 'conhecimento';
+        f.valor_causa.value = p.valor_causa || '';
+        f.observacoes.value = p.observacoes || '';
+        new bootstrap.Modal(document.getElementById('m-processo')).show();
+      };
+    });
+  }
+
+  async function loadList() {
+    tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Carregando...</td></tr>';
+    const params = new URLSearchParams();
+    if (fQ.value) params.set('q', fQ.value);
+    if (fTrib.value) params.set('tribunal', fTrib.value);
+    const r = await fetch('/api/v1/processos?' + params.toString());
+    const j = await r.json();
+    render(j.items || []);
+  }
+
+  // Buscar dados do CNJ no DJe (preenche classe, assunto, tribunal)
+  btnBuscar.onclick = async () => {
+    const cnj = onlyDigits(inpCnj.value);
+    if (cnj.length !== 20) {
+      djeFeedback.innerHTML = '<span class="text-danger">CNJ invalido (precisa de 20 digitos).</span>';
+      return;
+    }
+    djeFeedback.innerHTML = '<span class="text-muted">Consultando DJe Comunica...</span>';
+    btnBuscar.disabled = true;
+    try {
+      // Endpoint dedicado para pre-fill de formulario (retorna metadados detalhados)
+      const r = await fetch('/api/v1/dje/consultar-cnj/' + cnj, {method: 'POST'});
+      const j = await r.json();
+      if (j.status === 'desabilitado') {
+        djeFeedback.innerHTML = '<span class="text-danger">DJe desabilitado. Ative DJE_COMUNICA_ENABLED=true no .env.</span>';
+      } else if (j.status === 'erro') {
+        djeFeedback.innerHTML = '<span class="text-danger">' + (j.erro || 'erro') + '</span>';
+      } else if (!j.encontrado) {
+        djeFeedback.innerHTML = '<span class="text-muted">Nenhuma publicacao no DJe. Cadastre mesmo assim.</span>';
+      } else {
+        // Preenche campos com dados reais
+        if (j.tribunal && !selTrib.value) selTrib.value = j.tribunal;
+        if (j.classe && !inpClasse.value) inpClasse.value = j.classe;
+        if (j.assunto && !document.getElementById('inp-assunto').value)
+          document.getElementById('inp-assunto').value = j.assunto;
+        if (j.vara && !document.querySelector('[name=vara]').value)
+          document.querySelector('[name=vara]').value = j.vara;
+        if (j.partes) {
+          window._djePartes = j.partes;
+        }
+        djeFeedback.innerHTML = '<span class="text-success">' + j.mensagem + '</span>';
+      }
+    } catch (e) {
+      djeFeedback.innerHTML = '<span class="text-danger">Erro de rede: ' + e.message + '</span>';
+    } finally {
+      btnBuscar.disabled = false;
+    }
+  };
+
+  // Submit do form de novo processo
+  fProc.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {};
+    fd.forEach((v, k) => {
+      if (v === '' || v === '(auto)') return;
+      if (k === 'id_proc') return; // hidden
+      if (k === 'origem') return;
+      if (k === 'oab_origem') return;
+      if (k === 'uf_oab_origem') return;
+      body[k] = k === 'valor_causa' || k === 'cliente_id' ? Number(v) : v;
+    });
+    if (!body.numero_cnj) { alert('Informe o CNJ'); return; }
+    const idProc = document.getElementById('id_proc').value;
+    let r, novo;
+    if (idProc) {
+      // Edicao
+      r = await fetch('/api/v1/processos/' + idProc, {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) {
+        const j = await r.json();
+        alert('Erro: ' + (j.error || JSON.stringify(j)));
+        return;
+      }
+      novo = await r.json();
+      alert('Processo atualizado!');
+    } else {
+      // Criacao
+      r = await fetch('/api/v1/processos', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) {
+        const j = await r.json();
+        alert('Erro: ' + (j.error || JSON.stringify(j)));
+        return;
+      }
+      novo = await r.json();
+      alert('Processo cadastrado! Sera feita busca de andamentos no DJe.');
+    }
+    if (novo && novo.id) {
+      await fetch('/api/v1/processos/' + novo.id + '/atualizar-dje', {method: 'POST'});
+    }
+    location.reload();
+  };
+
+  document.getElementById('btn-capturar-todos-dje').onclick = async () => {
+    const b = document.getElementById('btn-capturar-todos-dje');
+    b.disabled = true; b.textContent = 'Atualizando...';
+    const r = await fetch('/api/v1/harvest/all', {method: 'POST'});
+    const j = await r.json();
+    alert('Coleta geral concluida.');
+    location.reload();
+  };
+
+  let filtroTimer = null;
+  fQ.oninput = () => { clearTimeout(filtroTimer); filtroTimer = setTimeout(loadList, 300); };
+  fTrib.onchange = loadList;
+
+  await loadDropdowns();
+  await loadList();
+})();
+</script>
+{% endblock %}

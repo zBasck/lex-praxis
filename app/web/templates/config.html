@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Configurações — Lex Praxis{% endblock %}
+{% block content %}
+<h3 class="mb-3">Configurações</h3>
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>Monitoramento</strong></div>
+      <div class="card-body">
+        <p class="mb-1"><b>Intervalo do robô:</b> {{ config.HARVEST_INTERVAL_MINUTES }} min</p>
+        <p class="mb-1"><b>Rodar ao iniciar:</b> {{ "sim" if config.HARVEST_RUN_ON_START else "não" }}</p>
+        <p class="mb-1"><b>Digest diário:</b> {{ "%02d:%02d"|format(config.DAILY_DIGEST_HOUR, config.DAILY_DIGEST_MINUTE) }}</p>
+        <hr>
+        <h6>Tribunais habilitados</h6>
+        <ul class="list-unstyled small mb-0">
+          {% for t, ativo in config.COURT_FLAGS.items() %}
+            <li><span class="badge bg-{{ 'success' if ativo else 'secondary' }}">{{ t }}</span> {{ "ativo" if ativo else "desligado" }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>IA</strong></div>
+      <div class="card-body">
+        <p class="mb-1"><b>Provedor:</b> {{ config.LLM_PROVIDER }}</p>
+        <p class="mb-1"><b>Modelo:</b> {{ config.LLM_MODEL }}</p>
+        <p class="mb-1"><b>Chave configurada:</b> {{ "sim" if config.LLM_API_KEY else "não — usando classificador por regras" }}</p>
+        <hr>
+        <h6>SMTP</h6>
+        <p class="mb-1"><b>Host:</b> {{ config.SMTP_HOST or "—" }}</p>
+        <p class="mb-1"><b>Usuário:</b> {{ config.SMTP_USER or "—" }}</p>
+        <p class="text-muted small">Edite o arquivo <code>.env</code> e reinicie para aplicar.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

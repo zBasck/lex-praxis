@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Prazos — Lex Praxis{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Prazos</h3>
+  <div>
+    <a class="btn btn-outline-secondary btn-sm" href="/cal.ics"><i class="bi bi-calendar-plus"></i> Assinar agenda (.ics)</a>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body">
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <select id="f-status" class="form-select">
+          <option value="aberto" selected>Abertos</option>
+          <option value="concluido">Concluídos</option>
+          <option value="cancelado">Cancelados</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select id="f-hor" class="form-select">
+          <option value="">Qualquer data</option>
+          <option value="7">Próx. 7 dias</option>
+          <option value="15" selected>Próx. 15 dias</option>
+          <option value="30">Próx. 30 dias</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light"><tr>
+          <th>Data limite</th><th>Dias</th><th>Processo</th><th>Descrição</th><th>Responsável</th><th>Prioridade</th><th></th>
+        </tr></thead>
+        <tbody id="tb-prz"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>LexPravis.prazos();</script>
+{% endblock %}

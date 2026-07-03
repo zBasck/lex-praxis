@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}DJe — Publicações{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-newspaper"></i> Diário de Justiça Eletrônico</h3>
+  <div>
+    <button class="btn btn-outline-primary btn-sm" id="btn-coletar-dje">
+      <i class="bi bi-arrow-repeat"></i> Coletar agora
+    </button>
+  </div>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-4">
+    <label class="form-label small text-muted">Filtrar por tribunal</label>
+    <select name="tribunal" class="form-select form-select-sm" id="select-tribunal">
+      <option value="">— Todos os tribunais —</option>
+    </select>
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button class="btn btn-primary btn-sm w-100" type="submit"><i class="bi bi-funnel"></i> Filtrar</button>
+  </div>
+</form>
+
+<div id="dje-status" class="alert alert-info py-2 d-none"></div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:100px">Data</th>
+          <th style="width:80px">Tribunal</th>
+          <th style="width:160px">Processo</th>
+          <th>Texto</th>
+          <th style="width:90px">Vínculo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in publicacoes %}
+        <tr>
+          <td class="text-nowrap small">{{ p.data.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge bg-secondary">{{ p.tribunal }}</span></td>
+          <td class="small">
+            {% if p.processo_id %}
+              <a href="{{ url_for('web.processo_detalhe', pid=p.processo_id) }}" class="text-decoration-none">
+                {{ p.numero_cnj or '—' }}
+              </a>
+            {% else %}
+              <span class="text-muted">{{ p.numero_cnj or 'sem CNJ' }}</span>
+            {% endif %}
+          </td>
+          <td class="small">{{ p.texto[:280] }}{% if p.texto|length > 280 %}…{% endif %}</td>
+          <td>
+            {% if p.vinculado_em %}
+              <span class="badge bg-success"><i class="bi bi-link-45deg"></i> OK</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">pendente</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">
+          Nenhuma publicação coletada. Use o botão <em>Coletar agora</em> para popular.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function() {
+  const res = await fetch('/api/v1/tribunais');
+  const data = await res.json();
+  const sel = document.getElementById('select-tribunal');
+  const atual = {{ (filtro_tribunal or '""')|tojson }};
+  const cats = {};
+  for (const t of data.items) {
+    if (!cats[t.categoria]) cats[t.categoria] = [];
+    cats[t.categoria].push(t);
+  }
+  const ordem = ['estadual', 'federal', 'trabalho', 'eleitoral', 'superior', 'militar'];
+  const labels = {estadual: 'Estaduais', federal: 'Federais', trabalho: 'Trabalho', eleitoral: 'Eleitorais', superior: 'Superiores', militar: 'Militares'};
+  for (const cat of ordem) {
+    if (!cats[cat]) continue;
+    const og = document.createElement('optgroup');
+    og.label = labels[cat] + ' (' + cats[cat].length + ')';
+    for (const t of cats[cat]) {
+      const opt = document.createElement('option');
+      opt.value = t.sigla;
+      opt.textContent = t.sigla + ' — ' + (t.uf ? t.uf + ' / ' : '') + t.nome.replace(/^Tribunal (Regional )?de /, '').slice(0, 60);
+      if (t.sigla === atual) opt.selected = true;
+      og.appendChild(opt);
+    }
+    sel.appendChild(og);
+  }
+
+  document.getElementById('btn-coletar-dje').addEventListener('click', async () => {
+    const status = document.getElementById('dje-status');
+    status.classList.remove('d-none', 'alert-danger');
+    status.classList.add('alert-info');
+    status.textContent = 'Coletando publicações do DJe...';
+    try {
+      const r = await fetch('/api/v1/dje/coletar', {method: 'POST'});
+      const j = await r.json();
+      status.classList.remove('alert-info', 'alert-danger');
+      status.classList.add('alert-success');
+      status.textContent = `Coleta concluída: ${j.publicacoes_novas} publicações, ${j.andamentos_novos} andamentos, ${j.prazos_novos} prazos gerados em ${j.tribunais.length} tribunais.`;
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) {
+      status.classList.remove('alert-info', 'alert-success');
+      status.classList.add('alert-danger');
+      status.textContent = 'Erro: ' + e.message;
+    }
+  });
+})();
+</script>
+{% endblock %}
