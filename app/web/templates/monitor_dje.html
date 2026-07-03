@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}Monitor DJe + OAB &middot; Lex-Praxis{% endblock %}
+{% block page %}Monitor DJe + OAB{% endblock %}
+{% block crumb %}&middot; captura de publicacoes do DJe pela sua OAB{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-head">
+      <h2>Status do coletor DJe</h2>
+      <span class="badge {{ 'ok' if dje_status.enabled else 'warn' }}">
+        {{ dje_status.modo|upper }}{% if dje_status.enabled %} (busca nacional){% endif %}
+      </span>
+    </div>
+    <p class="muted">
+      O sistema usa o <strong>DJEN</strong> (Diario de Justica Eletronico Nacional, do CNJ)
+      via a API publica <code>comunicaapi.pje.jus.br</code>. As comunicacoes sao exibidas na
+      <a href="https://comunica.pje.jus.br/consulta" target="_blank">consulta publica do DJEN</a>.
+      DataJud/MNI foi removido desta versao.
+    </p>
+    <ul class="kv">
+      <li><span>Fonte</span><code>{{ dje_status.url_base }}</code></li>
+      <li><span>Modo</span><code>{{ dje_status.modo }}</code></li>
+      <li><span>Auth</span><code>{{ 'autenticado (' + dje_status.auth_user + ')' if dje_status.auth_enabled else 'publico (varre cadernos)' }}</code></li>
+      <li><span>Tribunais cobertos</span><code>{{ dje_status.tribunais_cobertos }}</code></li>
+    </ul>
+    {% if dje_status.last_scan %}
+    <div class="flash info">
+      Ultima varredura: <strong>{{ dje_status.last_scan.cadernos_varridos }}</strong> cadernos
+      ({{ dje_status.last_scan.tribunais }} tribunais x {{ dje_status.last_scan.dias }} dias) -
+      <strong>{{ dje_status.last_scan.publicacoes_apos_filtro }}</strong> publicacoes com a OAB apos filtro
+      ({{ dje_status.last_scan.cadernos_com_pub }} cadernos continham publicacoes).
+    </div>
+    {% endif %}
+    {% if not dje_status.enabled %}
+    <div class="flash danger">
+      DJe desabilitado. Ative no .env: <code>DJE_COMUNICA_ENABLED=true</code> e reinicie o servidor.
+    </div>
+    {% endif %}
+    {% if dje_status.enabled and not dje_status.auth_enabled %}
+    <div class="flash warn">
+      <strong>Modo publico ativo</strong> - o sistema baixa cadernos diarios de {{ dje_status.tribunais_cobertos }} tribunais
+      e filtra localmente pela OAB. E lento e a taxa de acerto depende de a OAB ter publicacao no periodo.
+      <br><br>
+      <strong>Recomendacao:</strong> para busca por OAB eficiente, ative o modo autenticado no .env:
+      <pre><code>DJE_COMUNICA_AUTH_ENABLED=true
+DJE_COMUNICA_USER=seu_login_pje
+DJE_COMUNICA_PASSWORD=sua_senha_pje</code></pre>
+      (sao as mesmas credenciais que voce usa para logar no tribunal pelo PJe)
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Cadastrar OAB</h2>
+    </div>
+    <div class="modal fade" id="m-oab-edit" tabindex="-1">
+      <div class="modal-dialog">
+        <form class="modal-content" id="f-oab-edit">
+          <div class="modal-header"><h5>Editar OAB</h5>
+            <button class="btn-close" data-bs-dismiss="modal" type="button"></button></div>
+          <div class="modal-body">
+            <input type="hidden" name="id">
+            <div class="mb-2"><label class="form-label">Numero</label>
+              <input class="form-control" name="numero" required></div>
+            <div class="mb-2"><label class="form-label">UF</label>
+              <input class="form-control" name="uf" maxlength="2" required></div>
+            <div class="mb-2"><label class="form-label">Apelido</label>
+              <input class="form-control" name="apelido"></div>
+            <div class="mb-2"><label class="form-label">Intervalo (min)</label>
+              <input class="form-control" type="number" min="5" max="1440" name="intervalo_minutos"></div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="ativo" checked id="chk-oab-ativo">
+              <label class="form-check-label" for="chk-oab-ativo">Ativo</label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+            <button class="btn btn-primary" type="submit">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <form id="form-oab" class="form">
+      <div class="form-row">
+        <label>Numero da OAB
+          <input name="numero" required pattern="[0-9]+" placeholder="ex: 123456">
+        </label>
+        <label>UF
+          <select name="uf" required>
+            <option value="">UF</option>
+            {% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}
+            <option value="{{ uf }}">{{ uf }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Apelido (opcional)
+          <input name="apelido" placeholder="ex: Dr. Joao - escritorio">
+        </label>
+        <label>Intervalo (min)
+          <input name="intervalo_minutos" type="number" value="60" min="5" max="1440">
+        </label>
+      </div>
+      <div class="form-row right">
+        <button type="submit" class="btn primary">Cadastrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>OABs monitoradas</h2>
+    <div class="right">
+      <button class="btn" id="btn-capturar-todas">Executar captura de todas</button>
+    </div>
+  </div>
+  <table class="data" id="tbl-oabs">
+    <thead>
+      <tr><th>OAB</th><th>Apelido</th><th>Intervalo</th><th>Encontrados</th><th>Criados</th><th>Ultima busca</th><th>Acoes</th></tr>
+    </thead>
+    <tbody>
+      {% for o in oabs %}
+      <tr data-id="{{ o.id }}">
+        <td><strong>{{ o.numero }}/{{ o.uf }}</strong></td>
+        <td>{{ o.apelido or '-' }}</td>
+        <td>{{ o.intervalo_minutos }} min</td>
+        <td>{{ o.total_processos_encontrados or 0 }}</td>
+        <td>{{ o.total_processos_criados or 0 }}</td>
+        <td>{{ o.ultima_busca_em.strftime('%d/%m %H:%M') if o.ultima_busca_em else '-' }}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary" data-capturar="{{ o.id }}">Capturar</button>
+          <button class="btn btn-sm btn-outline-secondary" data-oab-edit='{{ {"id":o.id,"numero":o.numero,"uf":o.uf,"apelido":o.apelido or "","ativo":o.ativo,"intervalo_minutos":o.intervalo_minutos}|tojson }}'>Editar</button>
+          <button class="btn btn-sm btn-outline-danger" data-oab-del="{{ o.id }}">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted center">Nenhuma OAB cadastrada. Cadastre acima.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Buscar por OAB (avulso)</h2>
+  </div>
+  <form id="form-busca-avulsa" class="form">
+    <div class="form-row">
+      <label>OAB
+        <input name="numero" required pattern="[0-9]+" placeholder="123456">
+      </label>
+      <label>UF
+        <input name="uf" required maxlength="2" placeholder="SP">
+      </label>
+      <label>Dias retroativos
+        <input name="days_back" type="number" value="7" min="1" max="90">
+      </label>
+      <div class="form-row right">
+        <button type="submit" class="btn">Buscar no DJe</button>
+      </div>
+    </div>
+  </form>
+  <div id="resultado-busca" class="resultado"></div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Historico de capturas</h2>
+  </div>
+  <table class="data">
+    <thead>
+      <tr><th>Quando</th><th>OAB</th><th>Status</th><th>Pubs</th><th>Novos</th><th>And.</th><th>Prazos</th><th>Mensagem</th></tr>
+    </thead>
+    <tbody>
+      {% for c in capturas %}
+      <tr>
+        <td>{{ c.executada_em.strftime('%d/%m %H:%M') if c.executada_em else '-' }}</td>
+        <td>{{ c.oab.oab_formatada if c.oab else '-' }}</td>
+        <td><span class="badge {{ c.status }}">{{ c.status }}</span></td>
+        <td>{{ c.processos_encontrados or 0 }}</td>
+        <td>{{ c.processos_novos or 0 }}</td>
+        <td>{{ c.andamentos_criados or 0 }}</td>
+        <td>{{ c.prazos_gerados or 0 }}</td>
+        <td class="muted">{{ c.mensagem or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted center">Nenhuma captura registrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('form-oab').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {};
+  fd.forEach((v, k) => body[k] = v);
+  const r = await fetch('/api/v1/oab', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (r.ok) { location.reload(); }
+  else { alert('Erro: ' + (j.error || JSON.stringify(j))); }
+});
+
+document.querySelectorAll('[data-capturar]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.capturar;
+    btn.disabled = true; btn.textContent = '...';
+    const r = await fetch('/api/v1/oab/' + id + '/capturar', {method: 'POST'});
+    const j = await r.json();
+    alert(JSON.stringify(j, null, 2));
+    location.reload();
+  });
+});
+
+document.getElementById('btn-capturar-todas').addEventListener('click', async () => {
+  const r = await fetch('/api/v1/oab/capturar-todas', {method: 'POST'});
+  const j = await r.json();
+  alert(JSON.stringify(j, null, 2));
+  location.reload();
+});
+
+document.querySelectorAll('[data-oab-edit]').forEach(b => {
+  b.onclick = () => {
+    const o = JSON.parse(b.dataset.oabEdit);
+    const f = document.getElementById('f-oab-edit');
+    f.id.value = o.id; f.numero.value = o.numero; f.uf.value = o.uf;
+    f.apelido.value = o.apelido; f.intervalo_minutos.value = o.intervalo_minutos;
+    document.getElementById('chk-oab-ativo').checked = o.ativo;
+    new bootstrap.Modal(document.getElementById('m-oab-edit')).show();
+  };
+});
+
+document.getElementById('f-oab-edit').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = {
+    numero: f.numero.value, uf: f.uf.value.toUpperCase(),
+    apelido: f.apelido.value,
+    intervalo_minutos: parseInt(f.intervalo_minutos.value),
+    ativo: document.getElementById('chk-oab-ativo').checked,
+  };
+  const r = await fetch('/api/v1/oab/' + f.id.value, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  if (r.ok) location.reload();
+  else { const j = await r.json(); alert('Erro: ' + (j.error || JSON.stringify(j))); }
+};
+
+document.querySelectorAll('[data-oab-del]').forEach(b => {
+  b.onclick = async () => {
+    if (!confirm('Excluir esta OAB cadastrada?')) return;
+    const r = await fetch('/api/v1/oab/' + b.dataset.oabDel, {method: 'DELETE'});
+    if (r.ok) location.reload();
+  };
+});
+
+document.getElementById('form-busca-avulsa').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {numero: fd.get('numero'), uf: fd.get('uf'), days_back: parseInt(fd.get('days_back'))};
+  const r = await fetch('/api/v1/oab/buscar', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  const out = document.getElementById('resultado-busca');
+  if (!r.ok) { out.innerHTML = '<div class="flash danger">' + (j.erro || JSON.stringify(j)) + '</div>'; return; }
+  if (j.total === 0) { out.innerHTML = '<div class="flash warn">Nenhuma publicacao encontrada nesse periodo.</div>'; return; }
+  out.innerHTML = '<div class="muted">' + j.total + ' publicacao(oes) encontradas para ' + j.oab + ':</div>'
+    + '<ul>' + j.publicacoes.map(p => '<li><code>' + p.numero_cnj + '</code> (' + p.data + ') - ' + p.tribunal + ' - ' + p.tipo_ato + ' <a href="/processos" class="link-primary">ir para processos</a></li>').join('') + '</ul>'
+    + '<p class="muted small">Para transformar estas publicacoes em processos monitorados, '
+    + 'clique em <b>Capturar agora</b> na OAB acima.</p>';
+});
+</script>
+{% endblock %}

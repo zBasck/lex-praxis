@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Capturas - Lex Praxis{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="h4 mb-0"><i class="bi bi-clock-history"></i> Log de Capturas</h2>
+  <button class="btn btn-outline-secondary btn-sm" id="btn-refresh">
+    <i class="bi bi-arrow-repeat"></i> Atualizar
+  </button>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle" id="tabela-capturas">
+        <thead class="table-light">
+          <tr>
+            <th>Início</th>
+            <th>Duração</th>
+            <th>OAB</th>
+            <th>Fonte</th>
+            <th>Status</th>
+            <th>Encontrados</th>
+            <th>Novos</th>
+            <th>Andamentos</th>
+            <th>Prazos</th>
+            <th>Alertas</th>
+            <th>Mensagem</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let oabsCache = {};
+function fmt(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("pt-BR");
+}
+function statusBadge(s) {
+  return {
+    "ok": '<span class="badge bg-success">OK</span>',
+    "parcial": '<span class="badge bg-warning text-dark">Parcial</span>',
+    "vazio": '<span class="badge bg-secondary">Vazio</span>',
+    "erro": '<span class="badge bg-danger">Erro</span>',
+    "rodando": '<span class="badge bg-info">Rodando…</span>',
+  }[s] || `<span class="badge bg-light text-dark">${s || "?"}</span>`;
+}
+async function loadOabs() {
+  const r = await fetch("/api/v1/oabs");
+  const j = await r.json();
+  j.items.forEach(o => oabsCache[o.id] = o);
+}
+async function load() {
+  const tbody = document.querySelector("#tabela-capturas tbody");
+  tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Carregando…</td></tr>';
+  const r = await fetch("/api/v1/capturas");
+  const j = await r.json();
+  if (!j.items.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Nenhuma captura registrada ainda. Cadastre uma OAB e clique em "Capturar".</td></tr>';
+    return;
+  }
+  tbody.innerHTML = j.items.map(c => {
+    const oab = oabsCache[c.oab_id];
+    return `
+      <tr>
+        <td>${fmt(c.executada_em)}</td>
+        <td>${c.duracao_ms ? Math.round(c.duracao_ms / 100) / 10 + "s" : "—"}</td>
+        <td>${oab ? oab.uf + " " + oab.numero : ("#" + c.oab_id)}</td>
+        <td><span class="badge bg-light text-dark">${c.fonte || "?"}</span></td>
+        <td>${statusBadge(c.status)}</td>
+        <td>${c.processos_encontrados || 0}</td>
+        <td>${c.processos_novos || 0}</td>
+        <td>${c.andamentos_criados || 0}</td>
+        <td>${c.prazos_gerados || 0}</td>
+        <td>${c.alertas_gerados || 0}</td>
+        <td class="text-muted small">${c.mensagem || (c.erro ? '<span class="text-danger">' + c.erro + '</span>' : "")}</td>
+      </tr>
+    `;
+  }).join("");
+}
+document.getElementById("btn-refresh").onclick = load;
+(async () => { await loadOabs(); await load(); })();
+</script>
+{% endblock %}

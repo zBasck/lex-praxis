@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Entrar - Lex-Praxis{% endblock %}
+{% block auth %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-logo">L</div>
+      <div>
+        <div class="brand-name">Lex-Praxis</div>
+        <div class="brand-sub">DJE/DJR + OAB</div>
+      </div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash {{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('web.login_post') }}">
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" name="email" autofocus required placeholder="admin@lexpraxis.local">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" name="password" required placeholder="1234">
+      </div>
+      <button class="btn primary" type="submit" style="width: 100%; justify-content: center; margin-top: 8px;">Entrar</button>
+    </form>
+    <p class="muted center mt-3" style="font-size: 12px;">
+      Acesso padrão: <strong>admin@lexpraxis.local</strong> · senha <strong>1234</strong>
+    </p>
+  </div>
+</div>
+{% endblock %}

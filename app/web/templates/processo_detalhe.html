@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ processo.numero_cnj }} - Lex-Praxis{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="mb-1">{{ processo.numero_cnj }}</h3>
+    <div class="mb-1">
+      <span class="badge bg-secondary">{{ processo.tribunal }}</span>
+      {% if processo.classe %}<span class="badge bg-light text-dark">{{ processo.classe }}</span>{% endif %}
+      {% if processo.instancia %}<span class="badge bg-light text-dark">{{ processo.instancia }} instancia</span>{% endif %}
+      {% if processo.fase %}<span class="badge bg-light text-dark">{{ processo.fase }}</span>{% endif %}
+      {% if processo.origem == 'oab_monitor' %}<span class="badge bg-info" title="Captado via OAB {{ processo.oab_origem }}/{{ processo.uf_oab_origem }}">via OAB</span>{% else %}<span class="badge bg-light text-dark">manual</span>{% endif %}
+    </div>
+    <div class="text-muted small">
+      Captado por OAB(s):
+      {% for o in processo.oabs_origem or [] %}
+        <span class="badge bg-info">{{ o.oab }}</span>
+      {% else %}
+        -
+      {% endfor %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary" id="btn-historico">
+      <i class="bi bi-clock-history"></i> Historico completo
+    </button>
+    <button class="btn btn-outline-primary" id="btn-harvest">
+      <i class="bi bi-arrow-repeat"></i> Atualizar DJe
+    </button>
+    <button class="btn btn-outline-secondary" id="btn-vincular-oab">
+      <i class="bi bi-link-45deg"></i> Vincular OAB
+    </button>
+    <button class="btn btn-outline-secondary" id="btn-editar">
+      <i class="bi bi-pencil"></i> Editar
+    </button>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>Informacoes</strong></div>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item"><b>Cliente:</b> {{ processo.cliente.nome if processo.cliente else '-' }}</li>
+        <li class="list-group-item"><b>Polo:</b> {{ processo.polo or '-' }}</li>
+        <li class="list-group-item"><b>Vara:</b> {{ processo.vara or '-' }}</li>
+        <li class="list-group-item"><b>Assunto:</b> {{ processo.assunto or '-' }}</li>
+        <li class="list-group-item"><b>Valor:</b> {{ processo.valor_causa or '-' }}</li>
+        <li class="list-group-item"><b>Orgao:</b> {{ processo.orgao or '-' }}</li>
+        <li class="list-group-item"><b>Ultima verificacao:</b> {{ processo.ultima_verificacao.strftime('%d/%m/%Y %H:%M') if processo.ultima_verificacao else 'nunca' }}</li>
+        {% if processo.link_djen %}
+        <li class="list-group-item">
+          <a href="{{ processo.link_djen }}" target="_blank" class="link-primary">Ver no PJe Comunica</a>
+          &middot;
+          <a href="https://comunica.pje.jus.br/consulta?numeroProcesso={{ processo.numero_cnj }}" target="_blank" class="link-primary">Consulta publica DJEN</a>
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <ul class="nav nav-tabs" id="tabs">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#and">Andamentos</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#prz">Prazos</a></li>
+    </ul>
+    <div class="tab-content border border-top-0 p-3 bg-white">
+      <div class="tab-pane fade show active" id="and">
+        <button class="btn btn-sm btn-outline-secondary mb-3" data-bs-toggle="collapse" data-bs-target="#novo-and">
+          <i class="bi bi-plus"></i> Adicionar andamento manual
+        </button>
+        <form id="f-and" class="collapse mb-3">
+          <textarea name="texto" class="form-control mb-2" rows="2" placeholder="Texto do andamento..."></textarea>
+          <input name="data" type="datetime-local" class="form-control mb-2">
+          <button class="btn btn-primary btn-sm">Registrar</button>
+        </form>
+        <div id="lista-and"></div>
+      </div>
+      <div class="tab-pane fade" id="prz">
+        <div id="lista-prz"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal vincular OAB -->
+<div class="modal fade" id="m-oab" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5>Vincular OAB</h5>
+        <button class="btn-close" data-bs-dismiss="modal" type="button"></button></div>
+      <div class="modal-body">
+        <p class="text-muted small">Vincule uma OAB monitorada a este processo. Ele sera
+          exibido na coluna "Origem" da lista de processos.</p>
+        <select class="form-select" id="sel-oab-vincular"></select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirmar-vincular">Vincular</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const PID = {{ processo.id }};
+LexPravis.processoDetalhe(PID);
+
+// Botao editar
+document.getElementById('btn-editar').onclick = () => {
+  window.location.href = '/processos#edit-' + PID;
+};
+// Botao historico
+document.getElementById('btn-historico').onclick = async () => {
+  if (!confirm('Buscar historico completo do DJEN (ate 2 anos)? Pode levar ate 1 minuto.')) return;
+  LexPravis.toast('Buscando historico...', 'info');
+  const j = await LexPravis.api('/api/v1/processos/' + PID + '/historico?days_back=730', {method: 'POST'});
+  LexPravis.toast('Encontrado: ' + (j.publicacoes_encontradas || 0) + ' publicacoes, ' + (j.novas_inseridas || 0) + ' novas', 'ok');
+  location.reload();
+};
+// Botao vincular OAB
+document.getElementById('btn-vincular-oab').onclick = async () => {
+  const r = await LexPravis.api('/api/v1/oab');
+  const sel = document.getElementById('sel-oab-vincular');
+  sel.innerHTML = '<option value="">Selecione...</option>' + (r.items || []).map(o => '<option value="' + o.id + '">' + o.numero + '/' + o.uf + ' - ' + (o.apelido || '') + '</option>').join('');
+  new bootstrap.Modal(document.getElementById('m-oab')).show();
+};
+document.getElementById('btn-confirmar-vincular').onclick = async () => {
+  const oid = document.getElementById('sel-oab-vincular').value;
+  if (!oid) return alert('Selecione uma OAB');
+  await LexPravis.api('/api/v1/processos/' + PID + '/vincular-oab', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({oab_id: parseInt(oid)})
+  });
+  bootstrap.Modal.getInstance(document.getElementById('m-oab')).hide();
+  LexPravis.toast('OAB vinculada!', 'ok');
+  location.reload();
+};
+</script>
+{% endblock %}

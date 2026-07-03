@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Lex-Praxis{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  {% if current_user.is_authenticated %}
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">L</div>
+        <div>
+          <div class="brand-name">Lex-Praxis</div>
+          <div class="brand-sub">DJe + Monitor OAB</div>
+        </div>
+      </div>
+
+      <div class="nav-section">Operacao</div>
+      <nav class="nav">
+        <a href="{{ url_for('web.dashboard') }}" class="{{ 'active' if request.endpoint == 'web.dashboard' }}">
+          <span class="ico">&#9707;</span> Dashboard
+        </a>
+        <a href="{{ url_for('web.processos') }}" class="{{ 'active' if request.endpoint in ('web.processos','web.processo_detalhe') }}">
+          <span class="ico">&#9636;</span> Processos
+        </a>
+        <a href="{{ url_for('web.prazos') }}" class="{{ 'active' if request.endpoint == 'web.prazos' }}">
+          <span class="ico">&#9719;</span> Prazos
+        </a>
+        <a href="{{ url_for('web.agenda') }}" class="{{ 'active' if request.endpoint == 'web.agenda' }}">
+          <span class="ico">&#9634;</span> Agenda
+        </a>
+      </nav>
+
+      <div class="nav-section">Monitoramento DJe</div>
+      <nav class="nav">
+        <a href="{{ url_for('web.monitor_dje') }}" class="{{ 'active' if request.endpoint == 'web.monitor_dje' }}">
+          <span class="ico">&#9889;</span> Monitor DJe + OAB
+        </a>
+        <a href="{{ url_for('web.dje') }}" class="{{ 'active' if request.endpoint == 'web.dje' }}">
+          <span class="ico">&#9633;</span> Publicacoes DJe
+        </a>
+        <a href="{{ url_for('web.capturas') }}" class="{{ 'active' if request.endpoint == 'web.capturas' }}">
+          <span class="ico">&#8635;</span> Historico de capturas
+        </a>
+        <a href="{{ url_for('web.alertas') }}" class="{{ 'active' if request.endpoint == 'web.alertas' }}">
+          <span class="ico">&#9873;</span> Alertas
+        </a>
+        <a href="{{ url_for('web.oabs') }}" class="{{ 'active' if request.endpoint == 'web.oabs' }}">
+          <span class="ico">&#9672;</span> OABs monitoradas
+        </a>
+      </nav>
+
+      <div class="nav-section">Cadastros</div>
+      <nav class="nav">
+        <a href="{{ url_for('web.clientes') }}" class="{{ 'active' if request.endpoint == 'web.clientes' }}">
+          <span class="ico">&#9673;</span> Clientes
+        </a>
+      </nav>
+
+      <div class="nav-section">Sistema</div>
+      <nav class="nav">
+        <a href="{{ url_for('web.configuracoes') }}" class="{{ 'active' if request.endpoint == 'web.configuracoes' }}">
+          <span class="ico">&#9881;</span> Configuracoes
+        </a>
+        <a href="{{ url_for('web.ia_pagina') }}" class="{{ 'active' if request.endpoint == 'web.ia_pagina' }}">
+          <span class="ico">&#129302;</span> IA local
+        </a>
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('web.admin_home') }}" class="{{ 'active' if 'admin' in (request.endpoint or '') }}">
+          <span class="ico">&#128274;</span> Admin
+        </a>
+        {% endif %}
+        <a href="{{ url_for('web.logout') }}">
+          <span class="ico">&#9211;</span> Sair
+        </a>
+      </nav>
+
+      <div class="user-info mt-2 small text-muted">
+        <i class="bi bi-person-circle"></i> {{ current_user.email }}<br>
+        <span class="badge bg-{{ 'success' if current_user.role=='admin' else 'info' }}">{{ current_user.role }}</span>
+      </div>
+
+      <div class="user">
+        <div class="user-chip"><span class="dot"></span> {{ current_user.name }}</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs"><strong>{% block page %}{% endblock %}</strong> {% block crumb %}{% endblock %}</div>
+        <div class="right">v2.0.0 &middot; DJe + OAB + IA</div>
+      </div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    {% block auth %}{% endblock %}
+  {% endif %}
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
