@@ -68,9 +68,11 @@ class MonitorOAB:
             raise ValueError("OAB e UF sao obrigatorios")
 
         captura = CapturaOAB(
-            oab_id=oab_id, status="rodando", executada_em=datetime.utcnow(),
-        ) if oab_id else CapturaOAB(
-            status="rodando", executada_em=datetime.utcnow(),
+            oab_id=oab_id,
+            oab_numero_avulsa=numero_oab if not oab_id else None,
+            oab_uf_avulsa=uf if not oab_id else None,
+            status="rodando",
+            executada_em=datetime.utcnow(),
         )
         db.session.add(captura)
         db.session.flush()
@@ -230,6 +232,7 @@ class MonitorOAB:
         return {
             "status": "ok",
             "processo": processo.numero_cnj,
+            "publicacoes_encontradas": len(andamentos_cap),
             "andamentos_novos": novos_and,
             "prazos_novos": novos_praz,
             "cadastro_atualizado": cadastro_changes,

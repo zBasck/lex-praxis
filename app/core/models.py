@@ -242,7 +242,9 @@ class CapturaOAB(db.Model):
     __tablename__ = "capturas_oab"
 
     id = db.Column(db.Integer, primary_key=True)
-    oab_id = db.Column(db.Integer, db.ForeignKey("oabs_monitoradas.id"), nullable=False, index=True)
+    oab_id = db.Column(db.Integer, db.ForeignKey("oabs_monitoradas.id"), nullable=True, index=True)
+    oab_numero_avulsa = db.Column(db.String(20))
+    oab_uf_avulsa = db.Column(db.String(2))
     executada_em = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     finalizada_em = db.Column(db.DateTime)
     duracao_ms = db.Column(db.Integer)

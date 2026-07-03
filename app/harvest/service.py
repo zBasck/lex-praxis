@@ -107,25 +107,34 @@ def harvest_processo(proc: Processo, days_back: int = None, so_hoje: bool = Fals
 
 
 def harvest_all_active(days_back: int = None, so_hoje: bool = False) -> dict:
-    """Itera todos os processos ativos e executa harvest por CNJ.
+    """Itera todos os processos ativos e executa harvest por CNJ via DJEN.
 
     so_hoje: se True, cada processo consulta apenas a data de hoje.
     days_back: se fornecido, usa essa janela (so_hoje tem prioridade).
     """
+    from app.harvest.oab_capture import MonitorOAB
     processos = Processo.query.filter_by(ativo=True).all()
-    total_a = total_p = 0
+    total_a = total_p = total_pub = 0
     erros = []
+    monitor = MonitorOAB()
     for p in processos:
         try:
-            a, q = harvest_processo(p, days_back=days_back, so_hoje=so_hoje)
-            total_a += a
-            total_p += q
+            r = monitor.atualizar_andamentos(p, so_hoje=so_hoje, days_back=days_back)
+            if r.get("status") == "ok":
+                total_pub += r.get("publicacoes_encontradas", 0)
+                total_a += r.get("andamentos_novos", 0)
+                total_p += r.get("prazos_novos", 0)
         except Exception as e:
             log.exception("Falha ao processar %s", p.numero_cnj)
             erros.append({"processo": p.numero_cnj, "erro": str(e)})
     return {
+        "total_processos": len(processos),
         "processos": len(processos),
+        "total_publicacoes": total_pub,
+        "publicacoes_encontradas": total_pub,
+        "total_andamentos": total_a,
         "andamentos_novos": total_a,
+        "total_prazos": total_p,
         "prazos_novos": total_p,
         "erros": erros,
     }

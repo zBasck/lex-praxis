@@ -379,9 +379,39 @@ def update_oab(oid):
 @login_required
 def delete_oab(oid):
     o = OABMonitorada.query.get_or_404(oid)
+    # Limpa dependencias que tem FK NOT NULL para oab_id (cascade nao cobre tudo).
+    CapturaOABPublicacao.query.filter(CapturaOABPublicacao.oab_id == oid).delete(synchronize_session=False)
+    CapturaOAB.query.filter(CapturaOAB.oab_id == oid).delete(synchronize_session=False)
+    AlertaCliente.query.filter(AlertaCliente.oab_id == oid).delete(synchronize_session=False)
+    ProcessoOAB.query.filter(ProcessoOAB.oab_id == oid).delete(synchronize_session=False)
     db.session.delete(o)
     db.session.commit()
     return jsonify({"deleted": True, "id": oid})
+
+# ============== LOOKUP DE COMARCAS E ORGAOS (TJRJ API publica) ==============
+@bp.get("/tjrj/comarcas")
+@login_required
+def tjrj_comarcas():
+    """Lista comarcas do TJRJ (paginada)."""
+    from app.harvest.pje_apis import listar_comarcas_tjrj
+    pagina = int(request.args.get("page", 1))
+    tamanho = int(request.args.get("size", 50))
+    items = listar_comarcas_tjrj(pagina=pagina, tamanho=tamanho)
+    return jsonify({"items": items, "page": pagina, "size": tamanho})
+
+@bp.get("/tjrj/orgaos")
+@login_required
+def tjrj_orgaos():
+    """Lista orgaos julgadores do TJRJ. Se ?nome=X busca por trecho."""
+    from app.harvest.pje_apis import listar_orgaos_tjrj, buscar_orgao_por_nome
+    nome = request.args.get("nome")
+    if nome and len(nome) >= 3:
+        items = buscar_orgao_por_nome(nome, limite=20)
+    else:
+        pagina = int(request.args.get("page", 1))
+        tamanho = int(request.args.get("size", 50))
+        items = listar_orgaos_tjrj(pagina=pagina, tamanho=tamanho)
+    return jsonify({"items": items})
 
 @bp.post("/oab/<int:oid>/capturar")
 @login_required
