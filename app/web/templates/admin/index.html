@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Admin - Lex-Praxis{% endblock %}
+{% block page %}Painel admin{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Painel administrativo</h3>
+<p class="text-muted">Apenas administradores.</p>
+<div class="row g-3">
+  <div class="col-md-3">
+    <a href="/admin/usuarios" class="card border-0 shadow-sm text-decoration-none text-dark p-3 d-block">
+      <h5>Usuarios</h5>
+      <p class="text-muted small mb-0">Crie, edite, ative/desative usuarios do sistema.</p>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/admin/configs" class="card border-0 shadow-sm text-decoration-none text-dark p-3 d-block">
+      <h5>Configuracoes globais</h5>
+      <p class="text-muted small mb-0">Intervalos, DJe, IA - valores do sistema todo.</p>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/admin/logs" class="card border-0 shadow-sm text-decoration-none text-dark p-3 d-block">
+      <h5>Logs de auditoria</h5>
+      <p class="text-muted small mb-0">Veja o que cada usuario fez no sistema.</p>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="/ia" class="card border-0 shadow-sm text-decoration-none text-dark p-3 d-block">
+      <h5>IA local</h5>
+      <p class="text-muted small mb-0">Teste, resuma publicacoes, classifique andamentos.</p>
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Clientes — Lex Praxis{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Clientes</h3>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#m-cli">
+    <i class="bi bi-plus-lg"></i> Novo cliente
+  </button>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body">
+    <input id="f-q" class="form-control mb-3" placeholder="Buscar...">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light"><tr>
+          <th>Nome</th><th>Documento</th><th>Tipo</th><th>Email</th><th>Telefone</th><th>Processos</th>
+        </tr></thead>
+        <tbody id="tb-cli"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="m-cli" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="f-cli">
+        <div class="modal-header"><h5>Novo cliente</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body row g-3">
+          <div class="col-12"><label class="form-label">Nome *</label><input name="nome" class="form-control" required></div>
+          <div class="col-md-6"><label class="form-label">Documento</label><input name="documento" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label">Tipo</label>
+            <select name="tipo" class="form-select"><option>PF</option><option>PJ</option></select>
+          </div>
+          <div class="col-md-6"><label class="form-label">E-mail</label><input type="email" name="email" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label">Telefone</label><input name="phone" class="form-control"></div>
+          <div class="col-12"><label class="form-label">Endereço</label><input name="endereco" class="form-control"></div>
+          <div class="col-12"><label class="form-label">Observações</label><textarea name="observacoes" class="form-control" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancelar</button>
+          <button class="btn btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>LexPravis.clientes();</script>
+{% endblock %}

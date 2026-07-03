@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Logs - Admin{% endblock %}
+{% block page %}Logs de auditoria{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Logs de auditoria (ultimos 300)</h3>
+<table class="table table-sm table-hover align-middle">
+  <thead class="table-light">
+    <tr><th>Quando</th><th>Usuario</th><th>Acao</th><th>Categoria</th><th>Alvo</th><th>Detalhes</th></tr>
+  </thead>
+  <tbody>
+    {% for l in logs %}
+    <tr>
+      <td class="small">{{ l.created_at[:19] if l.created_at }}</td>
+      <td class="small">{{ l.user_id or '-' }}</td>
+      <td><span class="badge bg-secondary">{{ l.acao }}</span></td>
+      <td class="small">{{ l.categoria or '-' }}</td>
+      <td class="small">{{ l.alvo_tipo or '' }} {{ l.alvo_id or '' }}</td>
+      <td class="small text-muted">{{ (l.detalhes or '')[:120] }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-center text-muted py-4">Nenhum log ainda.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

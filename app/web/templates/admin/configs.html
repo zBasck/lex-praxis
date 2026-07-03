@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Configs globais - Admin{% endblock %}
+{% block page %}Configuracoes globais{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Configuracoes do sistema (apenas admin)</h3>
+<p class="text-muted">Estas configuracoes afetam todo o sistema. Para preferencias pessoais, va em
+  <a href="/configuracoes">/configuracoes</a>.</p>
+
+<table class="table table-hover align-middle">
+  <thead class="table-light">
+    <tr><th>Chave</th><th>Valor</th><th>Descricao</th><th>Acoes</th></tr>
+  </thead>
+  <tbody>
+    {% for c in configs %}
+    <tr>
+      <td><code>{{ c.key }}</code></td>
+      <td><input class="form-control form-control-sm" value="{{ c.value or '' }}" id="v-{{ c.key }}"></td>
+      <td class="text-muted small">{{ c.description or '' }}</td>
+      <td><button class="btn btn-sm btn-primary" data-save='{{ c.key }}'>Salvar</button></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-save]').forEach(b => {
+  b.onclick = async () => {
+    const k = b.dataset.save;
+    const v = document.getElementById('v-' + k).value;
+    const r = await fetch('/api/v1/system/configs/' + k, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: v})
+    });
+    if (r.ok) alert('Salvo!');
+  };
+});
+</script>
+{% endblock %}

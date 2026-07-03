@@ -1,0 +1,8 @@
+/* Lex-Praxis - CSS minimo (Bootstrap cobre quase tudo) */
+body { font-family: 'Inter', system-ui, sans-serif; }
+code { font-family: 'JetBrains Mono', monospace; }
+.brand { padding: 12px 16px; font-weight: 700; }
+.text-muted { color: #6c757d !important; }
+.bg-info { background-color: #0dcaf0 !important; color: #000 !important; }
+.table > :not(caption) > * > * { vertical-align: middle; }
+.toast { border-radius: 8px; }
