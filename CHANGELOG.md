@@ -1,5 +1,33 @@
 # Changelog Lex-Praxis
 
+## v3.0.0 (2026-07-03) - Estabilidade total e correcoes criticas
+
+### BUGS CRITICOS CORRIGIDOS
+- **db.session.rollback() removido de oab_capture.py:309**. Era o motivo dos
+  cadastros de processos em branco: o rollback() apagava o Processo e a
+  Publicacao que tinham acabado de ser commitados, se o CapturaOABPublicacao
+  desse conflito de unique constraint. Agora verifica antes se ja existe o
+  vinculo e segue em frente sem perder o que foi feito.
+- **_prazo() agora retorna processo_cnj e processo_tribunal**. Sem isso, o
+  template /prazos mostrava "undefined" na coluna Processo. A descricao
+  tambem e enriquecida com CNJ + tribunal quando vem curta.
+- **create_oab dispara busca inteligente em 2 threads**: 30 dias (rapido,
+  via DJEN direto) + 365 dias em background (varre cadernos de 60 tribunais
+  PJe). Antes era 730 dias direto, que o DJEN nem respondia.
+- **Busca avulsa com cards formatados**: CNJ, tribunal, tipo_ato, partes,
+  e botao "Cadastrar este processo" em cada resultado. days_back default
+  foi de 7 para 30.
+
+### MUDANCAS DA v2.x QUE AGORA FUNCIONAM DE VERDADE
+- O painel admin (/admin/usuarios, /admin/configs, /admin/logs) JA esta
+  implementado desde a v2.0.0 -- agora a tabela de usuarios nao quebra
+  mais ao excluir.
+- O historico 2 anos por CNJ JA esta implementado (POST /processos/<id>/historico).
+- O cadastro multi-usuario JA esta funcionando (escopo=todos para admin).
+- Configuracoes persistem no banco (UserConfig, SystemConfig) e a engine
+  IA le do banco, nao do .env.
+
+
 ## v2.0.0 (2026-07-03) - Release com IA local + Multi-usuario
 
 ### NOVOS RECURSOS

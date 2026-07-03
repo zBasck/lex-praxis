@@ -101,24 +101,19 @@ def dje_status():
 @bp.get("/ia/status")
 @login_required
 def ia_status():
-    from app.intel.llm_local import status as llm_status, cfg_from_user_config
-    cfg_model = UserConfig.query.filter_by(user_id=current_user.id).first()
-    cfg = cfg_from_user_config(cfg_model)
-    return jsonify(llm_status(cfg))
+    from app.intel.llm_local import status as llm_status
+    return jsonify(llm_status())
 
 
 @bp.post("/ia/resumir")
 @login_required
 def ia_resumir():
-    from app.intel.llm_local import resumir_publicacao, cfg_from_user_config
+    from app.intel.llm_local import resumir_publicacao
     data = request.get_json() or {}
     texto = data.get("texto", "")
     if not texto:
         return _err("texto obrigatorio")
-    cfg = data.get("config")
-    if not cfg:
-        cfg_model = UserConfig.query.filter_by(user_id=current_user.id).first()
-        cfg = cfg_from_user_config(cfg_model)
+    cfg = data.get("config") or {}
     resumo = resumir_publicacao(texto, cfg)
     if not resumo:
         return jsonify({"disponivel": False, "resumo": None,
@@ -129,15 +124,12 @@ def ia_resumir():
 @bp.post("/ia/classificar")
 @login_required
 def ia_classificar():
-    from app.intel.llm_local import classificar_ato, cfg_from_user_config
+    from app.intel.llm_local import classificar_ato
     data = request.get_json() or {}
     texto = data.get("texto", "")
     if not texto:
         return _err("texto obrigatorio")
-    cfg = data.get("config")
-    if not cfg:
-        cfg_model = UserConfig.query.filter_by(user_id=current_user.id).first()
-        cfg = cfg_from_user_config(cfg_model)
+    cfg = data.get("config") or {}
     categoria = classificar_ato(texto, cfg)
     if not categoria:
         return jsonify({"disponivel": False, "categoria": None,
@@ -148,15 +140,12 @@ def ia_classificar():
 @bp.post("/ia/sugerir-tarefa")
 @login_required
 def ia_sugerir_tarefa():
-    from app.intel.llm_local import sugerir_tarefa, cfg_from_user_config
+    from app.intel.llm_local import sugerir_tarefa
     data = request.get_json() or {}
     texto = data.get("texto", "")
     if not texto:
         return _err("texto obrigatorio")
-    cfg = data.get("config")
-    if not cfg:
-        cfg_model = UserConfig.query.filter_by(user_id=current_user.id).first()
-        cfg = cfg_from_user_config(cfg_model)
+    cfg = data.get("config") or {}
     tarefa = sugerir_tarefa(texto, cfg)
     if not tarefa:
         return jsonify({"disponivel": False, "tarefa": None,
@@ -333,29 +322,6 @@ def create_oab():
     )
     db.session.add(o)
     db.session.commit()
-
-    # Dispara a PRIMEIRA busca automaticamente: 30 dias agora (resposta
-    # rapida do DJEN direto) e 365 dias em background (varre cadernos de
-    # ~60 tribunais -- pode demorar varios minutos mas acha publicacoes
-    # mais antigas que o DJEN direto nao retorna).
-    import threading
-    def _primeira_busca(days_back: int):
-        try:
-            with current_app.app_context():
-                monitor = MonitorOAB()
-                monitor.capturar_para_oab_oab(
-                    o, days_back=days_back, user=current_user
-                )
-        except Exception as e:
-            current_app.logger.warning(
-                "primeira busca OAB %s/%s (dias=%s) falhou: %s",
-                o.numero, o.uf, days_back, e,
-            )
-    # Resposta rapida: 30 dias (DJEN direto responde rapido)
-    threading.Thread(target=_primeira_busca, args=(30,), daemon=True).start()
-    # Background: 365 dias via cadernos (mais lento mas pega processos antigos)
-    threading.Thread(target=_primeira_busca, args=(365,), daemon=True).start()
-
     return jsonify(o.to_dict()), 201
 
 
@@ -986,18 +952,10 @@ def add_andamento_manual(pid):
 @bp.post("/processos/<int:pid>/atualizar-dje")
 @login_required
 def atualizar_dje_processo(pid):
-    """Busca publicacoes DJe por CNJ e atualiza andamentos + cadastro do processo.
-
-    Query params:
-      ?hoje=1         -> consulta apenas publicacoes de hoje
-      ?days_back=N    -> janela customizada (padrao 30)
-    Resposta inclui "cadastro_atualizado" com os campos preenchidos pelo DJEN.
-    """
+    """Busca publicacoes DJe por CNJ e atualiza andamentos."""
     p = Processo.query.get_or_404(pid)
     monitor = MonitorOAB()
-    so_hoje = request.args.get("hoje", "").lower() in ("1", "true", "yes", "on")
-    days_back = request.args.get("days_back", type=int)
-    res = monitor.atualizar_andamentos(p, so_hoje=so_hoje, days_back=days_back)
+    res = monitor.atualizar_andamentos(p)
     code = 200 if res.get("status") == "ok" else (503 if res.get("status") == "indisponivel" else 502)
     return jsonify(res), code
 
@@ -1005,68 +963,8 @@ def atualizar_dje_processo(pid):
 @bp.post("/harvest/all")
 @login_required
 def trigger_harvest_all():
-    """Atualiza todos os processos ativos.
-
-    Query params:
-      ?hoje=1         -> para cada processo, consulta apenas publicacoes de hoje
-      ?days_back=N    -> janela customizada (sobrescreve so_hoje)
-    """
-    so_hoje = request.args.get("hoje", "").lower() in ("1", "true", "yes", "on")
-    days_back = request.args.get("days_back", type=int)
-    if days_back is not None:
-        res = harvest_all_active(days_back=days_back, so_hoje=False)
-    elif so_hoje:
-        res = harvest_all_active(days_back=1, so_hoje=True)
-    else:
-        res = harvest_all_active()
+    res = harvest_all_active()
     return jsonify(res)
-
-
-@bp.post("/harvest/all/today")
-@login_required
-def trigger_harvest_all_today():
-    """Atalho: atualiza todos os processos consultando APENAS publicacoes de hoje.
-
-    Para cada processo ativo, consulta o DJEN com
-    ?numeroProcesso=<CNJ>&dataDisponibilizacaoInicio=hoje&dataFim=hoje
-    (mesmo formato do link exemplo do frontend do comunica.pje.jus.br).
-    """
-    monitor = MonitorOAB()
-    processos = Processo.query.filter_by(ativo=True).all()
-    total_a = 0
-    total_p = 0
-    total_cad = 0
-    erros = []
-    detalhes = []
-    for p in processos:
-        try:
-            r = monitor.atualizar_andamentos(p, so_hoje=True, days_back=1)
-            if r.get("status") == "ok":
-                total_a += r.get("andamentos_novos", 0)
-                total_p += r.get("prazos_novos", 0)
-                if r.get("cadastro_atualizado"):
-                    total_cad += len(r["cadastro_atualizado"])
-                detalhes.append({
-                    "processo_id": p.id,
-                    "numero_cnj": p.numero_cnj,
-                    "andamentos_novos": r.get("andamentos_novos", 0),
-                    "prazos_novos": r.get("prazos_novos", 0),
-                    "cadastro_atualizado_count": len(r.get("cadastro_atualizado", {})),
-                })
-            else:
-                erros.append({"processo": p.numero_cnj, "status": r.get("status"),
-                              "mensagem": r.get("mensagem")})
-        except Exception as e:
-            log.exception("Falha ao atualizar processo %s", p.numero_cnj)
-            erros.append({"processo": p.numero_cnj, "erro": str(e)})
-    return jsonify({
-        "processos_consultados": len(processos),
-        "andamentos_novos": total_a,
-        "prazos_novos": total_p,
-        "cadastros_atualizados": total_cad,
-        "detalhes": detalhes,
-        "erros": erros,
-    })
 
 
 # ------------------ Prazos (motor) ------------------
@@ -1184,20 +1082,8 @@ def _andamento(a):
 
 
 def _prazo(p):
-    # Enriquece a descricao com CNJ + tribunal quando ela esta curta.
-    # Sem isso, o usuario ve "Recurso de apelacao" sem saber de qual processo e.
-    descricao = p.descricao or ""
-    proc = getattr(p, "processo", None)
-    if proc and (len(descricao) < 80 or not any(
-            tok in descricao for tok in (proc.numero_cnj or "").split("-"))):
-        cnj = proc.numero_cnj or ""
-        trib = proc.tribunal or ""
-        if cnj and cnj not in descricao:
-            descricao = f"{descricao} - {cnj}" + (f" ({trib})" if trib else "")
     return {
-        "id": p.id, "processo_id": p.processo_id, "descricao": descricao,
-        "processo_cnj": proc.numero_cnj if proc else None,
-        "processo_tribunal": proc.tribunal if proc else None,
+        "id": p.id, "processo_id": p.processo_id, "descricao": p.descricao,
         "data_inicio": p.data_inicio.isoformat() if p.data_inicio else None,
         "data_limite": p.data_limite.isoformat() if p.data_limite else None,
         "tipo": p.tipo, "status": p.status, "prioridade": p.prioridade,

@@ -158,7 +158,7 @@ DJE_COMUNICA_PASSWORD=sua_senha_pje</code></pre>
         <input name="uf" required maxlength="2" placeholder="SP">
       </label>
       <label>Dias retroativos
-        <input name="days_back" type="number" value="7" min="1" max="90">
+        <input name="days_back" type="number" value="30" min="1" max="365">
       </label>
       <div class="form-row right">
         <button type="submit" class="btn">Buscar no DJe</button>
@@ -271,10 +271,27 @@ document.getElementById('form-busca-avulsa').addEventListener('submit', async (e
   const j = await r.json();
   const out = document.getElementById('resultado-busca');
   if (!r.ok) { out.innerHTML = '<div class="flash danger">' + (j.erro || JSON.stringify(j)) + '</div>'; return; }
-  if (j.total === 0) { out.innerHTML = '<div class="flash warn">Nenhuma publicacao encontrada nesse periodo.</div>'; return; }
-  out.innerHTML = '<div class="muted">' + j.total + ' publicacao(oes) encontradas para ' + j.oab + ':</div>'
-    + '<ul>' + j.publicacoes.map(p => '<li><code>' + p.numero_cnj + '</code> (' + p.data + ') - ' + p.tribunal + ' - ' + p.tipo_ato + ' <a href="/processos" class="link-primary">ir para processos</a></li>').join('') + '</ul>'
-    + '<p class="muted small">Para transformar estas publicacoes em processos monitorados, '
+  if (j.total === 0) { out.innerHTML = '<div class="flash warn">Nenhuma publicacao encontrada nos ultimos ' + body.days_back + ' dias para a OAB ' + j.oab + '. Tente aumentar o periodo.</div>'; return; }
+  out.innerHTML = '<div class="muted mb-2"><b>' + j.total + '</b> publicacao(oes) encontradas para OAB ' + j.oab + ':</div>'
+    + '<div class="d-flex flex-column gap-2">' + j.publicacoes.map(p => {
+        const cnjDigits = (p.numero_cnj || '').replace(/\D/g, '');
+        return '<div class="border rounded p-2">'
+          + '<div class="d-flex justify-content-between">'
+          + '<div><code>' + p.numero_cnj + '</code> <span class="badge bg-light text-dark">' + (p.tribunal || '?') + '</span> <span class="badge bg-light text-dark">' + (p.tipo_ato || '?') + '</span></div>'
+          + '<div class="text-muted small">' + p.data + '</div>'
+          + '</div>'
+          + '<div class="small text-muted mt-1">' + ((p.partes || '').slice(0, 200)) + '</div>'
+          + '<div class="mt-2 d-flex gap-2">'
+          + '<a href="/processos?cnj=' + cnjDigits + '" class="btn btn-sm btn-primary">'
+          + '<i class="bi bi-plus-lg"></i> Cadastrar este processo'
+          + '</a>'
+          + '<a href="https://comunica.pje.jus.br/consulta?numeroProcesso=' + cnjDigits + '" target="_blank" class="btn btn-sm btn-outline-secondary">'
+          + '<i class="bi bi-box-arrow-up-right"></i> Ver no DJEN'
+          + '</a>'
+          + '</div>'
+          + '</div>';
+      }).join('') + '</div>'
+    + '<p class="muted small mt-3">Para transformar todas as publicacoes em processos monitorados, '
     + 'clique em <b>Capturar agora</b> na OAB acima.</p>';
 });
 </script>

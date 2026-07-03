@@ -306,17 +306,27 @@ class MonitorOAB:
         db.session.add(pub_row)
         db.session.flush()
 
-        # Vincula publicacao a captura OAB (rastreabilidade)
+        # Vincula publicacao a captura OAB (rastreabilidade).
+        # CRITICO: NAO usar db.session.rollback() aqui -- ele apaga o
+        # processo e a publicacao que acabaram de ser commitados em
+        # flush(). Verifica antes se ja existe o vinculo e, se der erro
+        # de unique constraint, segue em frente sem perder o que ja foi feito.
         if oab_id and captura and getattr(captura, "id", None):
-            try:
-                rel = CapturaOABPublicacao(
-                    captura_id=captura.id,
-                    publicacao_id=pub_row.id,
-                    oab_id=oab_id,
-                )
-                db.session.add(rel)
-            except Exception:
-                db.session.rollback()  # unique constraint - ja vinculada
+            ja_vinculada = CapturaOABPublicacao.query.filter_by(
+                captura_id=captura.id,
+                publicacao_id=pub_row.id,
+            ).first()
+            if not ja_vinculada:
+                try:
+                    rel = CapturaOABPublicacao(
+                        captura_id=captura.id,
+                        publicacao_id=pub_row.id,
+                        oab_id=oab_id,
+                    )
+                    db.session.add(rel)
+                    db.session.flush()
+                except Exception as e:
+                    log.debug("vinculacao CapturaOABPublicacao ja existe: %s", e)
 
         # Cria Andamento
         andam = self._criar_andamento(proc, pub.to_andamento(), tipo_ato_override=pub.tipo_ato)

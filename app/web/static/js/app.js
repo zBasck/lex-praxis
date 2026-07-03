@@ -234,19 +234,22 @@ const LexPravis = (() => {
       if (h) params.set("horizon", h);
       const d = await get("/prazos?" + params);
       document.getElementById("tb-prz").innerHTML = d.items.length
-        ? d.items.map(p => `
+        ? d.items.map(p => {
+            const cnj = p.processo_cnj || ("#" + p.processo_id);
+            const trib = p.processo_tribunal ? ` <span class="badge bg-light text-dark">${esc(p.processo_tribunal)}</span>` : "";
+            return `
           <tr class="prazo-row ${p.vencido ? "vencido" : (p.dias_restantes <= 3 ? "critico" : "")}">
             <td>${dateFmt(p.data_limite)}</td>
             <td>${badgeForPrazo(p)}</td>
-            <td><a href="/processos/${p.processo_id}">${esc(p.processo_cnj)}</a></td>
+            <td><a href="/processos/${p.processo_id}" class="link-primary">${esc(cnj)}</a>${trib}</td>
             <td>${esc(p.descricao)}</td>
-            <td>${esc(p.responsavel_nome || "—")}</td>
+            <td>${p.dias_restantes >= 0 ? p.dias_restantes + " dias" : ("vencido ha " + Math.abs(p.dias_restantes) + " dias")}</td>
             <td><span class="badge bg-light text-dark">${esc(p.prioridade || "normal")}</span></td>
             <td>
-              ${p.status === "aberto" ? `<button class="btn btn-sm btn-success" data-con="${p.id}"><i class="bi bi-check2"></i></button>
-               <button class="btn btn-sm btn-outline-secondary" data-cnc="${p.id}"><i class="bi bi-x"></i></button>` : ""}
+              ${p.status === "aberto" ? `<button class="btn btn-sm btn-success" data-con="${p.id}" title="Concluir prazo"><i class="bi bi-check2"></i></button>
+               <button class="btn btn-sm btn-outline-danger" data-cnc="${p.id}" title="Cancelar prazo"><i class="bi bi-x"></i></button>` : `<span class="text-muted small">${esc(p.status)}</span>`}
             </td>
-          </tr>`).join("")
+          </tr>`;}).join("")
         : empty("Sem prazos nesse filtro");
       document.querySelectorAll("[data-con]").forEach(b =>
         b.onclick = async () => { await post(`/prazos/${b.dataset.con}/concluir`); carregar(); });
