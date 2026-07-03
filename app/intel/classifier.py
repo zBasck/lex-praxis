@@ -240,10 +240,46 @@ def _anthropic(texto, api_key, model, timeout):
 # ============== FACHADA ==============
 
 def classify(texto: str, llm_provider: str = "local", llm_key: str = "",
-             llm_model: str = "gpt-4o-mini", timeout: int = 20) -> Classificacao:
-    """Classifica usando LLM quando disponível e válido; cai para regras se falhar."""
+             llm_model: str = "llama3.1:8b", timeout: int = 20) -> Classificacao:
+    """Classifica usando LLM quando disponível; cai para regras se falhar.
+
+    Providers suportados:
+      - openai / anthropic (requer llm_key)
+      - local (Ollama/LM Studio/llama.cpp) - via app.intel.llm_local
+    """
+    # 1) OpenAI / Anthropic (pago)
     if llm_provider in {"openai", "anthropic"} and llm_key:
         out = classify_by_llm(texto, llm_provider, llm_key, llm_model, timeout)
         if out:
             return out
+    # 2) Local (Ollama, LM Studio, llama.cpp) - GRATUITO
+    if llm_provider in {"local", "ollama", "openai_compat", "lmstudio"}:
+        try:
+            from app.intel.llm_local import classificar_ato
+            res = classificar_ato(texto)
+            if res and isinstance(res, str):
+                import json as _json
+                try:
+                    parsed = _json.loads(res)
+                    if isinstance(parsed, dict):
+                        return Classificacao(
+                            tipo_ato=parsed.get("tipo_ato", "outros"),
+                            prazo_dias=parsed.get("prazo_dias"),
+                            prazo_marco=parsed.get("prazo_marco", "publicacao"),
+                            tarefa_sugerida=parsed.get("tarefa_sugerida", ""),
+                            resumo_cliente=parsed.get("resumo_cliente", ""),
+                            confianca=0.8,
+                            origem="llm_local",
+                        )
+                except (_json.JSONDecodeError, ValueError):
+                    # LLM devolveu texto livre - tenta extrair tipo_ato
+                    return Classificacao(
+                        tipo_ato=res.strip()[:50] or "outros",
+                        tarefa_sugerida="Verificar publicacao",
+                        confianca=0.5,
+                        origem="llm_local",
+                    )
+        except Exception as e:
+            log.debug("LLM local indisponivel, usando regras: %s", e)
+    # 3) Regras (fallback)
     return classify_by_rules(texto)

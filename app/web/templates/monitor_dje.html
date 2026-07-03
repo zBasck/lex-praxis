@@ -264,16 +264,45 @@ document.querySelectorAll('[data-oab-del]').forEach(b => {
 document.getElementById('form-busca-avulsa').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
-  const body = {numero: fd.get('numero'), uf: fd.get('uf'), days_back: parseInt(fd.get('days_back'))};
+  const body = {numero: fd.get('numero'), uf: (fd.get('uf') || '').toUpperCase(), days_back: parseInt(fd.get('days_back') || '30')};
+  const out = document.getElementById('resultado-busca');
+  out.innerHTML = '<p class="muted"><i class="bi bi-hourglass"></i> Buscando no DJe Comunica...</p>';
   const r = await fetch('/api/v1/oab/buscar', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const j = await r.json();
-  const out = document.getElementById('resultado-busca');
-  if (!r.ok) { out.innerHTML = '<div class="flash danger">' + (j.erro || JSON.stringify(j)) + '</div>'; return; }
-  if (j.total === 0) { out.innerHTML = '<div class="flash warn">Nenhuma publicacao encontrada nesse periodo.</div>'; return; }
-  out.innerHTML = '<div class="muted">' + j.total + ' publicacao(oes) encontradas para ' + j.oab + ':</div>'
-    + '<ul>' + j.publicacoes.map(p => '<li><code>' + p.numero_cnj + '</code> (' + p.data + ') - ' + p.tribunal + ' - ' + p.tipo_ato + ' <a href="/processos" class="link-primary">ir para processos</a></li>').join('') + '</ul>'
-    + '<p class="muted small">Para transformar estas publicacoes em processos monitorados, '
-    + 'clique em <b>Capturar agora</b> na OAB acima.</p>';
+  if (!r.ok || j.status === 'erro' || j.status === 'desabilitado') {
+    out.innerHTML = '<div class="flash danger">' + (j.erro || j.mensagem || 'Erro na busca') + '</div>';
+    return;
+  }
+  if (j.total === 0) {
+    out.innerHTML = '<div class="flash warn">Nenhuma publicacao encontrada para ' + j.oab + ' nos ultimos ' + body.days_back + ' dias.<br><small>A OAB pode nao ter sido intimada nesse periodo, ou o DJEN limita o retorno a ~30 dias.</small></div>';
+    return;
+  }
+  // Render resultados com link para o CNJ e detalhes do texto
+  const cards = j.publicacoes.map(p => {
+    const partes = (p.partes || []).map(x => (x.nome || x)).join(' / ') || '-';
+    const cnj = p.numero_cnj || '';
+    const safeCnj = cnj.replace(/[^0-9.-]/g, '');
+    const safeTexto = (p.texto || '').replace(/</g, '&lt;');
+    return `
+      <div class="card mb-2">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h6 class="mb-1">${p.tipo_ato || 'Publicacao'} - ${p.tribunal || ''}</h6>
+              <p class="mb-1 small"><b>CNJ:</b> <code>${cnj}</code></p>
+              <p class="mb-1 small"><b>Partes:</b> ${partes}</p>
+            </div>
+            <span class="badge bg-secondary">${p.data || ''}</span>
+          </div>
+          <details class="mt-2"><summary style="cursor: pointer; font-size: 13px;">Ver texto da publicacao</summary>
+            <pre style="white-space: pre-wrap; font-size: 12px; max-height: 200px; overflow: auto; background: #f8f9fa; padding: 8px; border-radius: 4px;">${safeTexto}</pre>
+          </details>
+          ${safeCnj ? '<a href="/processos?novo_cnj=' + encodeURIComponent(safeCnj) + '" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-plus"></i> Cadastrar este processo</a>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+  out.innerHTML = '<div class="flash ok"><b>' + j.total + '</b> publicacao(oes) encontrada(s) para ' + j.oab + ' nos ultimos ' + body.days_back + ' dias.</div>' + cards;
 });
 </script>
 {% endblock %}

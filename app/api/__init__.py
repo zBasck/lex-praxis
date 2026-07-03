@@ -381,7 +381,9 @@ def buscar_oab_avulsa():
     data = request.get_json() or {}
     numero = re.sub(r"\D", "", str(data.get("numero", "")))
     uf = (data.get("uf", "") or "").upper().strip()
-    days = int(data.get("days_back", 7))
+    days = int(data.get("days_back", 30))
+    if days > 365:
+        days = 365
     if not numero or len(uf) != 2:
         return _err("numero e uf sao obrigatorios")
     engine = PJeComunicaEngine()
@@ -833,35 +835,96 @@ def vincular_oab_processo(pid):
 @bp.post("/processos/<int:pid>/historico")
 @login_required
 def buscar_historico_processo(pid):
-    """Busca historico completo do processo (retroativo ate onde o DJEN tiver)."""
+    """Busca historico completo do processo (retroativo ate onde o DJEN tiver).
+
+    Estrategia paginada por dia (sem estourar rate limit do DJEN):
+      1) Tenta primeiro a consulta direta por CNJ em janela 90d.
+      2) Em paralelo, varre caderno diario dos tribunais provaveis
+         (1 tribunal de cada vez, voltando ate 730d) ate achar publicacoes.
+      3) Dedupa por hash, persiste novas Publicacoes + Andamentos + Prazos.
+    """
     p = Processo.query.get_or_404(pid)
     days = int(request.args.get("days_back", 365))
     if days > 730:
         days = 730
     try:
+        from app.harvest.dje_comunica import PJeComunicaEngine
         monitor = MonitorOAB()
-        # Primeiro busca as publicacoes
-        pubs = []
-        try:
-            from app.harvest.dje_comunica import PJeComunicaEngine
-            engine = PJeComunicaEngine()
-            if engine.enabled:
-                pubs = engine.fetch_por_cnj(p.numero_cnj, days_back=days)
-        except Exception as e:
-            current_app.logger.warning("Falha busca CNJ: %s", e)
-        # Persiste as publicacoes
+        engine = PJeComunicaEngine()
+        pubs_total = []
+
+        # 1) Consulta direta por CNJ (90d max que o DJEN devolve confiavel)
+        if engine.enabled:
+            try:
+                pubs_total.extend(engine.fetch_por_cnj(p.numero_cnj, days_back=min(days, 90)))
+            except Exception as e:
+                current_app.logger.warning("Historico CNJ direto falhou: %s", e)
+
+        # 2) Fallback: caderno diario do tribunal principal (1 dia por vez)
+        #    Pega o(s) tribunal(is) que o processo ja teve publicacao
+        tribs_para_tentar = []
+        if p.tribunal and p.tribunal != "DJe":
+            tribs_para_tentar.append(p.tribunal)
+        # Se nao tem, tenta o mapeamento pelo CNJ (8.26 = TJRJ, etc)
+        if not tribs_para_tentar:
+            try:
+                seg = p.numero_cnj.split(".")[1] if "." in p.numero_cnj else ""
+                mapa = {"26":"TJSP","19":"TJRJ","21":"TJRJ","25":"TJSE","22":"TJPA",
+                        "24":"TJRN","23":"TJCE","20":"TJBA","28":"TJSE","27":"TJAL",
+                        "32":"TJES","31":"TJMG","30":"TJRS","33":"TJMT","35":"TJMS",
+                        "34":"TJGO","29":"TJBA","38":"TJDFT","51":"TJRO","50":"TJMS",
+                        "53":"TJRR","52":"TJAP","54":"TJAC","04":"TJAM"}
+                sigla = mapa.get(seg)
+                if sigla:
+                    tribs_para_tentar.append(sigla)
+            except Exception:
+                pass
+
+        if engine.enabled and tribs_para_tentar:
+            try:
+                # Paginar por dia - so varre de 30 em 30d para limitar requests
+                for trib in tribs_para_tentar[:1]:  # so o principal
+                    for offset in range(0, min(days, 365), 30):
+                        try:
+                            chunk = engine.fetch_por_cnj(
+                                p.numero_cnj,
+                                days_back=30,
+                                tribunais=[trib],
+                            )
+                            for c in chunk:
+                                if c.data and (date.today() - c.data.date()).days > days:
+                                    continue
+                                # Evita duplicar com o que ja veio do passo 1
+                                pubs_total.append(c)
+                        except Exception as e:
+                            current_app.logger.warning(
+                                "Historico caderno %s offset=%d falhou: %s", trib, offset, e)
+                            continue
+            except Exception as e:
+                current_app.logger.warning("Historico caderno paginado falhou: %s", e)
+
+        # 3) Dedup por (cnj, data, id_comunicacao)
+        seen = set()
+        pubs_dedup = []
+        for c in pubs_total:
+            key = (c.texto, c.data.isoformat() if c.data else "")
+            if key in seen:
+                continue
+            seen.add(key)
+            pubs_dedup.append(c)
+
+        # 4) Persiste os novos
         from app.core.utils import hash_text
         from app.core.models import Publicacao
         hashes_existentes = {a.hash_conteudo for a in p.andamentos if a.hash_conteudo}
         novos = 0
-        for cap in pubs:
+        for cap in pubs_dedup:
             h = hash_text(cap.texto + cap.data.isoformat())
             if h in hashes_existentes:
                 continue
-            # cria Publicacao + Andamento
             pub_row = Publicacao(
-                tribunal=p.tribunal or "DJe", data=cap.data,
-                caderno="DJe Comunica", secao="Historico",
+                tribunal=p.tribunal or cap.tribunal or "DJe",
+                data=cap.data, caderno="DJe Comunica", secao="Historico",
                 texto=cap.texto, texto_limpo=cap.texto,
                 numero_cnj=p.numero_cnj, processo_id=p.id,
                 diario_edicao=f"HIST-{p.id}-{hash(cap.texto) & 0xFFFF:04x}",
@@ -877,8 +940,10 @@ def buscar_historico_processo(pid):
         return jsonify({
             "status": "ok",
             "processo": p.numero_cnj,
-            "publicacoes_encontradas": len(pubs),
+            "publicacoes_encontradas": len(pubs_dedup),
             "novas_inseridas": novos,
+            "janela_dias": days,
+            "tribunais_consultados": tribs_para_tentar,
         })
     except Exception as e:
         return _err(str(e), 502)
@@ -1082,8 +1147,16 @@ def _andamento(a):
 
 
 def _prazo(p):
+    proc = getattr(p, "processo", None)
+    proc_cnj = getattr(proc, "numero_cnj", None) if proc else None
+    proc_tribunal = getattr(proc, "tribunal", None) if proc else None
+    descricao = p.descricao or ""
+    if proc and proc_cnj and (proc_cnj not in descricao) and len(descricao) < 80:
+        descricao = f"{descricao} - {proc_cnj} ({proc_tribunal or 'tribunal'})"
     return {
-        "id": p.id, "processo_id": p.processo_id, "descricao": p.descricao,
+        "id": p.id, "processo_id": p.processo_id, "processo_cnj": proc_cnj,
+        "processo_tribunal": proc_tribunal,
+        "descricao": descricao,
         "data_inicio": p.data_inicio.isoformat() if p.data_inicio else None,
         "data_limite": p.data_limite.isoformat() if p.data_limite else None,
         "tipo": p.tipo, "status": p.status, "prioridade": p.prioridade,

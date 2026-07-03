@@ -29,6 +29,11 @@ from app.core.utils import normalize_cnj, hash_text
 from app.core.prazos import get_motor
 from app.intel.classifier import classify
 from app.intel.rules_extra import inferir_prazo, dias_uteis
+try:
+    from app.intel.llm_local import resumir_publicacao, sugerir_tarefa
+    LLM_DISPONIVEL = True
+except ImportError:
+    LLM_DISPONIVEL = False
 from app.harvest.dje_comunica import PJeComunicaEngine, DJeUnavailableError, PublicacaoDJE
 
 log = logging.getLogger(__name__)
@@ -299,12 +304,30 @@ class MonitorOAB:
         if refino and not cls.tarefa_sugerida:
             cls.tarefa_sugerida = refino["tarefa_sugerida"]
         tipo_ato = tipo_ato_override or cls.tipo_ato
+        # Hook IA local: resumo automatico e melhoria da tarefa sugerida
+        resumo = cls.resumo_cliente or ""
+        if LLM_DISPONIVEL and not resumo:
+            try:
+                resumo_llm = resumir_publicacao(cap.texto)
+                if resumo_llm:
+                    resumo = resumo_llm
+            except Exception:
+                pass
+        # Hook IA local: sugestao de tarefa se regras nao cobriram
+        tarefa = cls.tarefa_sugerida
+        if LLM_DISPONIVEL and (not tarefa or tarefa.strip() in ("", "Verificar publicacao")):
+            try:
+                tarefa_llm = sugerir_tarefa(cap.texto)
+                if tarefa_llm:
+                    tarefa = tarefa_llm
+            except Exception:
+                pass
         andam = Andamento(
             processo_id=proc.id, data=cap.data,
             texto=f"[DJe] {cap.texto}", texto_limpo=cap.texto[:1000],
             tipo_ato=tipo_ato, prazo_dias=cls.prazo_dias,
-            prazo_marco=cls.prazo_marco, tarefa_sugerida=cls.tarefa_sugerida,
-            resumo_cliente=cls.resumo_cliente, fonte=cap.fonte,
+            prazo_marco=cls.prazo_marco, tarefa_sugerida=tarefa,
+            resumo_cliente=resumo, fonte=cap.fonte,
             hash_conteudo=h, classificacao_origem=cls.origem,
         )
         db.session.add(andam)
@@ -318,15 +341,66 @@ class MonitorOAB:
             return False
         pz_calc = self.motor.calcular(andam.tipo_ato, andam.data, andam.texto)
         data_limite = pz_calc.data_limite or dias_uteis(andam.data.date(), andam.prazo_dias)
+        # Monta descricao rica com contexto (CNJ + tribunal + data da publicacao)
+        pub_data_str = andam.data.strftime("%d/%m/%Y") if andam.data else "?"
+        tarefa = pz_calc.tarefa_sugerida or andam.tarefa_sugerida or f"Prazo: {andam.tipo_ato}"
+        descricao_rich = f"{tarefa} - {proc.numero_cnj} ({proc.tribunal or 'tribunal'}) - publ. {pub_data_str}"
+        # Hook IA local: detecta se e urgente (so sobrescreve se LLM disser 'critica'/'alta')
+        prioridade = pz_calc.prioridade or "normal"
+        llm_prio = _prioridade_llm(andam.texto)
+        if llm_prio == "critica":
+            prioridade = "critica"
+        elif llm_prio == "alta" and prioridade == "normal":
+            prioridade = "alta"
         db.session.add(Prazo(
             processo_id=proc.id, andamento_id=andam.id,
-            descricao=pz_calc.tarefa_sugerida or andam.tarefa_sugerida or f"Prazo: {andam.tipo_ato}",
+            descricao=descricao_rich,
             data_inicio=andam.data.date(), data_limite=data_limite,
             tipo=andam.tipo_ato, responsavel_id=proc.responsavel_id,
-            status="aberto", prioridade=pz_calc.prioridade or "normal",
+            status="aberto", prioridade=prioridade,
         ))
         return True
 
 
 def get_monitor() -> MonitorOAB:
     return MonitorOAB()
+
+
+def _prioridade_llm(texto: str) -> Optional[str]:
+    """Usa LLM local para detectar se a publicacao exige atencao urgente.
+
+    Retorna 'critica' (intimacao sobre bloqueio/penhora iminente),
+    'alta' (audiencia/prazo fatal), ou None para manter a prioridade
+    que veio das regras.
+    """
+    if not LLM_DISPONIVEL or not texto:
+        return None
+    try:
+        from app.intel.llm_local import _client_from_cfg
+        client = _client_from_cfg()
+        if not client or not client.is_available():
+            return None
+        prompt = (
+            "Analise o texto de uma publicacao de diario oficial juridico. "
+            "Responda APENAS com uma das opcoes: CRITICA, ALTA ou NORMAL.\n"
+            "- CRITICA: intimacao sobre bloqueio de valores, penhora iminente, "
+            "expedicao de alvara, prazo fatal curto (menos de 5 dias), coisa julgada, "
+            "ou risco de perda de direito processual.\n"
+            "- ALTA: audiencia designada, prazo de 5 a 10 dias, decisao que "
+            "pode ser executada imediatamente.\n"
+            "- NORMAL: demais casos.\n\n"
+            f"TEXTO:\n{texto[:2000]}\n\nRESPOSTA:"
+        )
+        resp = client.generate(prompt, max_tokens=20, temperature=0.0)
+        if not resp:
+            return None
+        r = resp.strip().lower()
+        if "critica" in r:
+            return "critica"
+        elif "alta" in r:
+            return "alta"
+        elif "normal" in r:
+            return "normal"
+    except Exception as e:
+        log.debug("LLM prioridade falhou: %s", e)
+    return None
